@@ -1,24 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   ArrowDownLeft,
+  ArrowUpRight,
+  Bell,
   Check,
   CheckCircle2,
   ChevronDown,
   Clock3,
   Copy,
   ExternalLink,
-  Heart,
   Home,
-  Moon,
   Plus,
   QrCode,
-  ScanLine,
   Search,
   Send,
-  Sun,
   UserRound,
   Users,
 } from "lucide-react";
@@ -83,16 +80,14 @@ function Action({
   if (children) return children;
   if (!Icon) return null;
   return (
-    <button type="button" className="group flex min-w-0 flex-1 flex-col items-center gap-2">
-      <span className="grid size-12 place-items-center rounded-2xl border bg-background/65 text-foreground transition duration-200 group-hover:-translate-y-1 group-hover:border-primary/30">
-        <Icon className="size-5" />
-      </span>
-      <span className="text-xs font-bold">{label}</span>
+    <button type="button" className="group flex min-w-0 flex-1 flex-col items-center justify-center rounded-[20px] bg-white px-3 py-4 text-[#101117] transition duration-200 hover:-translate-y-1">
+      <Icon className="mb-1 size-5" />
+      <span className="text-sm font-extrabold">{label}</span>
     </button>
   );
 }
 
-function SendFlow() {
+export function SendFlow() {
   const [step, setStep] = useState<SendStep>("details");
   const [asset, setAsset] = useState<Asset>("USDC");
   const [recipient, setRecipient] = useState("maya.verse");
@@ -116,11 +111,9 @@ function SendFlow() {
   return (
     <Dialog onOpenChange={(open) => !open && window.setTimeout(reset, 180)}>
       <DialogTrigger asChild>
-        <button type="button" className="group flex min-w-0 flex-1 flex-col items-center gap-2">
-          <span className="verse-gradient grid size-12 place-items-center rounded-2xl text-white shadow-[0_12px_35px_rgba(181,0,255,.25)] transition duration-200 group-hover:-translate-y-1">
-            <Send className="size-5" />
-          </span>
-          <span className="text-xs font-bold">Send</span>
+        <button type="button" className="group flex min-w-0 flex-1 flex-col items-center justify-center rounded-[20px] bg-white px-3 py-4 text-[#101117] transition duration-200 hover:-translate-y-1">
+          <ArrowUpRight className="mb-1 size-5" />
+          <span className="text-sm font-extrabold">Send</span>
         </button>
       </DialogTrigger>
       <DialogContent className="glass-surface max-h-[92vh] overflow-y-auto rounded-[28px] p-0 sm:max-w-[460px]">
@@ -269,7 +262,7 @@ function SendFlow() {
   );
 }
 
-function ReceiveFlow() {
+export function ReceiveFlow() {
   const [copied, setCopied] = useState(false);
   const copyName = async () => {
     await navigator.clipboard?.writeText("kingsley.verse");
@@ -279,11 +272,9 @@ function ReceiveFlow() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button type="button" className="group flex min-w-0 flex-1 flex-col items-center gap-2">
-          <span className="grid size-12 place-items-center rounded-2xl border bg-background/65 transition duration-200 group-hover:-translate-y-1 group-hover:border-primary/30">
-            <ArrowDownLeft className="size-5" />
-          </span>
-          <span className="text-xs font-bold">Receive</span>
+        <button type="button" className="group flex min-w-0 flex-1 flex-col items-center justify-center rounded-[20px] bg-white px-3 py-4 text-[#101117] transition duration-200 hover:-translate-y-1">
+          <ArrowDownLeft className="mb-1 size-5" />
+          <span className="text-sm font-extrabold">Receive</span>
         </button>
       </DialogTrigger>
       <DialogContent className="glass-surface rounded-[28px] sm:max-w-[420px]">

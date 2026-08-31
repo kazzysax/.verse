@@ -27,6 +27,7 @@ const steps = [
 ];
 
 export function VerseOnboarding() {
+  const [introduced, setIntroduced] = useState(false);
   const [step, setStep] = useState(0);
   const [social, setSocial] = useState<"x" | "telegram">("x");
   const [email, setEmail] = useState("kingsley@example.com");
@@ -48,6 +49,56 @@ export function VerseOnboarding() {
     }
     setStep((current) => Math.min(3, current + 1));
   };
+
+  if (!introduced) {
+    return (
+      <main className="relative min-h-screen overflow-hidden bg-[#07080e] text-white">
+        <div className="absolute inset-x-0 top-0 h-[64vh] min-h-[430px] bg-[radial-gradient(circle_at_50%_8%,rgba(255,255,255,.18),transparent_18%),radial-gradient(circle_at_22%_18%,rgba(32,215,242,.52),transparent_30%),radial-gradient(circle_at_74%_16%,rgba(130,58,240,.55),transparent_34%),radial-gradient(circle_at_72%_45%,rgba(240,0,210,.32),transparent_28%),linear-gradient(180deg,#244ec8_0%,#151c64_48%,#07080e_100%)]" />
+        <div className="absolute inset-x-0 top-0 h-[64vh] min-h-[430px] bg-[linear-gradient(120deg,transparent_20%,rgba(255,255,255,.08)_48%,transparent_66%)] opacity-70 blur-2xl" />
+        <div className="pointer-events-none absolute left-1/2 top-[16vh] h-52 w-[78vw] max-w-[620px] -translate-x-1/2 rotate-[-5deg] rounded-[42px] border border-white/15 bg-white/[.055] shadow-[0_40px_120px_rgba(35,109,255,.35)] backdrop-blur-2xl" />
+        <div className="pointer-events-none absolute left-1/2 top-[20vh] flex h-48 w-[72vw] max-w-[560px] -translate-x-1/2 rotate-[4deg] items-center justify-center rounded-[42px] border border-white/15 bg-[#0d101a]/45 backdrop-blur-2xl">
+          <div className="text-center">
+            <p className="text-xs font-semibold text-white/60">Pay anyone with a name</p>
+            <p className="verse-gradient-text mt-2 text-3xl font-extrabold tracking-[-0.06em] sm:text-5xl">maya.verse</p>
+            <div className="mt-4 flex justify-center gap-2">
+              <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold">USDC</span>
+              <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold">VERSE</span>
+            </div>
+          </div>
+        </div>
+
+        <header className="relative z-20 mx-auto flex max-w-[1080px] items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
+          <VerseLogo className="text-white" />
+          <Link href="/" className="text-xs font-bold text-white/65 transition hover:text-white">Sign in</Link>
+        </header>
+
+        <section className="relative z-20 mx-auto flex min-h-screen max-w-[1080px] flex-col justify-end px-5 pb-8 sm:px-8 sm:pb-12 lg:items-start">
+          <div className="max-w-[560px]">
+            <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-cyan-300">Simple. Social. Gasless.</p>
+            <h1 className="mt-4 text-5xl font-extrabold leading-[.98] tracking-[-0.07em] sm:text-6xl">
+              Your money moves with <span className="verse-gradient-text">your name.</span>
+            </h1>
+            <p className="mt-5 max-w-md text-sm leading-6 text-white/55 sm:text-base">
+              Send USDC and VERSE to a .verse username, X handle, or Telegram username—no wallet addresses to copy.
+            </p>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <Button onClick={() => setIntroduced(true)} className="verse-gradient h-13 min-w-52 rounded-2xl border-0 px-7 text-base font-bold">
+                Get started <ArrowRight className="size-4" />
+              </Button>
+              <Link href="/" className="flex h-13 items-center justify-center rounded-2xl border border-white/12 px-7 text-sm font-bold text-white/75 transition hover:bg-white/[.06]">
+                Preview dashboard
+              </Link>
+            </div>
+          </div>
+          <div className="mt-8 flex gap-2">
+            <span className="verse-gradient h-1.5 w-10 rounded-full" />
+            <span className="h-1.5 w-2 rounded-full bg-white/25" />
+            <span className="h-1.5 w-2 rounded-full bg-white/25" />
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-7 sm:py-8">
