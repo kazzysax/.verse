@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  Bell,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -14,8 +14,11 @@ import {
   Home,
   Plus,
   QrCode,
+  Moon,
+  ScanLine,
   Search,
   Send,
+  Sun,
   UserRound,
   Users,
 } from "lucide-react";
