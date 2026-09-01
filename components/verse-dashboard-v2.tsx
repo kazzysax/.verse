@@ -5,17 +5,14 @@ import Link from "next/link";
 import {
   Bell,
   Check,
-  Clock3,
-  Home,
   Plus,
   Send,
-  UserRound,
-  Users,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { VerseLogo } from "@/components/verse-logo";
+import { VerseBottomNav } from "@/components/verse-bottom-nav";
 import { ReceiveFlow, SendFlow } from "@/components/verse-dashboard";
 import { useVerseAuth } from "@/components/verse-auth-context";
 import { friendlyApiError, verseApi, VerseApiError } from "@/lib/client/verse-api";
@@ -161,7 +158,7 @@ export function VerseDashboardV2() {
 
       <header className="relative z-20 px-5 pt-6 sm:px-8 sm:pt-8">
         <div className="mx-auto flex max-w-[900px] items-center justify-between">
-          <VerseLogo className="text-white" />
+          <VerseLogo className="text-2xl text-white" />
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -286,22 +283,7 @@ export function VerseDashboardV2() {
         </section>
       </main>
 
-      <nav className="fixed inset-x-3 bottom-3 z-30 flex items-center justify-around rounded-[24px] border border-white/10 bg-[#12141d]/90 px-2 py-2 shadow-2xl backdrop-blur-2xl sm:hidden">
-        {[
-          [Home, "Home", true],
-          [Clock3, "Activity", false],
-          [Users, "Contacts", false],
-          [UserRound, "Profile", false],
-        ].map(([Icon, label, active]) => {
-          const NavIcon = Icon as typeof Home;
-          return (
-            <button key={label as string} type="button" className={cn("flex min-w-16 flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-bold", active ? "bg-white/[.07] text-white" : "text-white/35")}>
-              <NavIcon className="size-4.5" />
-              {label as string}
-            </button>
-          );
-        })}
-      </nav>
+      <VerseBottomNav />
     </div>
   );
 }

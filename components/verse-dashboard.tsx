@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { VerseLogo } from "@/components/verse-logo";
+import { VerseLoader } from "@/components/verse-loader";
 import { friendlyApiError, verseApi } from "@/lib/client/verse-api";
 
 type Asset = "USDC" | "VERSE";
@@ -331,9 +332,7 @@ export function SendFlow({
           {step === "sending" && (
             <div className="grid min-h-[330px] place-items-center text-center">
               <div>
-                <div className="verse-gradient mx-auto grid size-20 animate-pulse place-items-center rounded-full">
-                  <Send className="size-8 text-white" />
-                </div>
+                <VerseLoader className="mx-auto size-20" label="Sending payment" />
                 <p className="mt-6 text-xl font-bold">Sending…</p>
                 <p className="mt-2 text-sm text-muted-foreground">Gas is sponsored by .verse</p>
               </div>

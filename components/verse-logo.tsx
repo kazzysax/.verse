@@ -12,17 +12,15 @@ export function VerseLogo({
     <span
       aria-label=".verse"
       className={cn(
-        "inline-flex h-10 items-center font-extrabold tracking-[-0.065em]",
+        "inline-flex h-10 items-center gap-[0.12em] text-xl font-extrabold tracking-[-0.065em]",
         className,
       )}
     >
       <span
         aria-hidden="true"
-        className="verse-gradient-text -mr-[0.03em] inline-block translate-y-[-0.015em] text-[3.75rem] leading-[0] drop-shadow-[0_8px_18px_rgba(184,0,255,.24)]"
-      >
-        .
-      </span>
-      <span className="text-xl">verse</span>
+        className="verse-gradient inline-block size-[0.48em] shrink-0 translate-y-[0.28em] rounded-full shadow-[0_5px_14px_rgba(184,0,255,.34)]"
+      />
+      <span className="text-[1em]">verse</span>
     </span>
   );
 }

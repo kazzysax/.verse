@@ -148,6 +148,18 @@ button, a { -webkit-tap-highlight-color: transparent; }
   -webkit-backdrop-filter: blur(24px);
 }
 
+@keyframes verse-dot-bob {
+  0%, 100% { transform: translateY(5px) scale(0.96); }
+  50% { transform: translateY(-7px) scale(1); }
+}
+
+.verse-loading-dot {
+  animation: verse-dot-bob 0.9s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  box-shadow:
+    0 12px 28px rgba(40, 121, 242, 0.26),
+    0 8px 32px rgba(240, 0, 210, 0.22);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;

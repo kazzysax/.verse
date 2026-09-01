@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ComponentType } from "react";
 import { emptyVerseAuth, VerseAuthContext } from "@/components/verse-auth-context";
+import { VerseLoader } from "@/components/verse-loader";
 
 type ClientConfig = { privyAppId: string };
 type RuntimeProps = { appId: string; children: React.ReactNode };
@@ -54,7 +55,7 @@ export function VerseAuthProvider({ children }: { children: React.ReactNode }) {
   if (!config || !Runtime) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#080910] text-white">
-        <span className="verse-gradient size-10 animate-pulse rounded-full" aria-label="Loading .verse" />
+        <VerseLoader className="size-20" />
       </main>
     );
   }
