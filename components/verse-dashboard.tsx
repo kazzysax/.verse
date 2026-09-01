@@ -172,8 +172,9 @@ export function SendFlow({
           <span className="text-sm font-extrabold">Send</span>
         </button>
       </DialogTrigger>
-      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-[30px] border-white/10 bg-[#101116] p-0 text-white shadow-[0_36px_120px_rgba(0,0,0,.7)] sm:max-w-[460px]">
-        <div className="p-6 sm:p-7">
+      <DialogContent className="inset-x-0 bottom-0 left-0 top-auto h-[62svh] max-h-[62svh] w-full max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-b-none rounded-t-[30px] border-white/10 bg-[#101116] p-0 text-white shadow-[0_-24px_90px_rgba(0,0,0,.7)] data-[state=closed]:slide-out-to-bottom-8 data-[state=open]:slide-in-from-bottom-8 sm:bottom-auto sm:left-[50%] sm:top-[50%] sm:h-auto sm:max-h-[92vh] sm:max-w-[460px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[30px] sm:shadow-[0_36px_120px_rgba(0,0,0,.7)]">
+        <div aria-hidden="true" className="absolute left-1/2 top-2.5 h-1 w-10 -translate-x-1/2 rounded-full bg-white/20 sm:hidden" />
+        <div className="h-full overflow-y-auto overscroll-contain px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-7 sm:h-auto sm:p-7">
           {step === "details" && (
             <DialogHeader>
               <div className="mb-2 flex items-center justify-between pr-8">
