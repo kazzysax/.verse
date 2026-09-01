@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePrivy } from "@privy-io/react-auth";
 import {
   ArrowRight,
   Check,
@@ -18,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { VerseLogo } from "@/components/verse-logo";
+import { friendlyApiError, verseApi } from "@/lib/client/verse-api";
 
 const steps = [
   { label: "Account", icon: UserRound, detail: "Email, X, or Telegram" },
@@ -27,27 +29,97 @@ const steps = [
 ];
 
 export function VerseOnboarding() {
+  const { ready, authenticated, user, login, linkEmail, getAccessToken } = usePrivy();
   const [introduced, setIntroduced] = useState(false);
   const [step, setStep] = useState(0);
   const [loginMethod, setLoginMethod] = useState<"email" | "x" | "telegram">("email");
-  const [email, setEmail] = useState("kingsley@example.com");
-  const [username, setUsername] = useState("kingsley");
+  const [username, setUsername] = useState("");
   const [checking, setChecking] = useState(false);
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [claimedName, setClaimedName] = useState("");
 
   useEffect(() => {
     document.documentElement.dataset.theme = "dark";
   }, []);
 
-  const next = () => {
-    if (step === 2) {
-      setChecking(true);
-      window.setTimeout(() => {
-        setChecking(false);
-        setStep(3);
-      }, 750);
+  useEffect(() => {
+    if (step !== 2 || !username || !authenticated) {
       return;
     }
-    setStep((current) => Math.min(3, current + 1));
+    const timer = window.setTimeout(async () => {
+      setChecking(true);
+      setError("");
+      try {
+        const result = await verseApi<{ name: string; available: boolean }>(
+          "/api/domains/check",
+          getAccessToken,
+          { method: "POST", body: JSON.stringify({ name: username }) },
+        );
+        setAvailable(result.available);
+      } catch (requestError) {
+        setAvailable(null);
+        setError(friendlyApiError(requestError));
+      } finally {
+        setChecking(false);
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [authenticated, getAccessToken, step, username]);
+
+  const currentStep = authenticated && step === 0 ? 1 : step;
+  const verifiedEmail = user?.email?.address ?? "";
+
+  const startAuthentication = () => {
+    setError("");
+    if (authenticated) {
+      setStep(1);
+      return;
+    }
+    const method = loginMethod === "x" ? "twitter" : loginMethod;
+    login({ loginMethods: [method] });
+  };
+
+  const prepareAccount = async () => {
+    setError("");
+    const verifiedEmail = user?.email?.address;
+    if (!verifiedEmail) {
+      linkEmail();
+      return;
+    }
+    setBusy(true);
+    try {
+      await verseApi<{ user: { walletReady: boolean } }>(
+        "/api/users/bootstrap",
+        getAccessToken,
+        { method: "POST", body: JSON.stringify({ recoveryEmail: verifiedEmail }) },
+      );
+      setStep(2);
+    } catch (requestError) {
+      setError(friendlyApiError(requestError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const claimDomain = async () => {
+    if (!username || available !== true) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await verseApi<{ domain: { name: string } }>(
+        "/api/domains/claim",
+        getAccessToken,
+        { method: "POST", body: JSON.stringify({ name: username }) },
+      );
+      setClaimedName(result.domain.name);
+      setStep(3);
+    } catch (requestError) {
+      setError(friendlyApiError(requestError));
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (!introduced) {
@@ -126,14 +198,14 @@ export function VerseOnboarding() {
               <div key={label} className="flex items-center gap-4">
                 <span className={cn(
                   "grid size-10 place-items-center rounded-full border transition",
-                  index < step && "bg-emerald-500/12 text-emerald-500",
-                  index === step && "verse-gradient border-transparent text-white shadow-[0_10px_30px_rgba(180,0,255,.24)]",
-                  index > step && "bg-card/40 text-muted-foreground"
+                  index < currentStep && "bg-emerald-500/12 text-emerald-500",
+                  index === currentStep && "verse-gradient border-transparent text-white shadow-[0_10px_30px_rgba(180,0,255,.24)]",
+                  index > currentStep && "bg-card/40 text-muted-foreground"
                 )}>
-                  {index < step ? <Check className="size-4" /> : <Icon className="size-4" />}
+                  {index < currentStep ? <Check className="size-4" /> : <Icon className="size-4" />}
                 </span>
                 <div>
-                  <p className={cn("text-sm font-bold", index !== step && "text-muted-foreground")}>{label}</p>
+                  <p className={cn("text-sm font-bold", index !== currentStep && "text-muted-foreground")}>{label}</p>
                   <p className="text-xs text-muted-foreground">{detail}</p>
                 </div>
               </div>
@@ -143,15 +215,15 @@ export function VerseOnboarding() {
 
         <section className="glass-surface mx-auto w-full max-w-[520px] rounded-[32px] p-5 sm:p-8">
           <div className="mb-7 flex items-center justify-between">
-            <p className="text-xs font-bold text-muted-foreground">Step {step + 1} of 4</p>
+            <p className="text-xs font-bold text-muted-foreground">Step {currentStep + 1} of 4</p>
             <div className="flex gap-1.5">
               {steps.map((item, index) => (
-                <span key={item.label} className={cn("h-1.5 w-8 rounded-full transition", index <= step ? "verse-gradient" : "bg-muted")} />
+                <span key={item.label} className={cn("h-1.5 w-8 rounded-full transition", index <= currentStep ? "verse-gradient" : "bg-muted")} />
               ))}
             </div>
           </div>
 
-          {step === 0 && (
+          {currentStep === 0 && (
             <div>
               <VerseLogo className="mx-auto w-fit" />
               <div className="mt-6 text-center">
@@ -195,8 +267,8 @@ export function VerseOnboarding() {
                   {loginMethod === "telegram" && <CheckCircle2 className="size-5 text-primary" />}
                 </button>
               </div>
-              <Button onClick={next} className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold">
-                Continue <ArrowRight className="size-4" />
+              <Button onClick={startAuthentication} disabled={!ready || busy} className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold">
+                {authenticated ? "Continue" : "Verify with Privy"} <ArrowRight className="size-4" />
               </Button>
               <p className="mt-4 text-center text-[11px] leading-5 text-muted-foreground">
                 Privy creates the embedded wallet. Link X or Telegram only if you want people to pay those handles.
@@ -204,7 +276,7 @@ export function VerseOnboarding() {
             </div>
           )}
 
-          {step === 1 && (
+          {currentStep === 1 && (
             <div>
               <span className="mx-auto grid size-16 place-items-center rounded-full bg-primary/10 text-primary"><Mail className="size-7" /></span>
               <div className="mt-6 text-center">
@@ -221,17 +293,26 @@ export function VerseOnboarding() {
                 <span className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Email address</span>
                 <div className="flex h-14 items-center gap-3 rounded-2xl border bg-background/50 px-4 focus-within:ring-2 focus-within:ring-ring/40">
                   <Mail className="size-4 text-muted-foreground" />
-                  <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" />
+                  <input
+                    type="email"
+                    value={verifiedEmail}
+                    readOnly
+                    placeholder="Link a verified email with Privy"
+                    className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground"
+                  />
                 </div>
               </label>
-              <div className="mt-3 flex items-center gap-3 rounded-2xl bg-emerald-500/8 p-3 text-xs text-emerald-500">
-                <CheckCircle2 className="size-4 shrink-0" /> Verification code ready for the prototype
+              <div className={cn("mt-3 flex items-center gap-3 rounded-2xl p-3 text-xs", user?.email?.address ? "bg-emerald-500/8 text-emerald-500" : "bg-accent/55 text-muted-foreground")}>
+                <CheckCircle2 className="size-4 shrink-0" />
+                {user?.email?.address ? "Email verified by Privy" : "A verified recovery email is required before wallet setup"}
               </div>
-              <Button onClick={next} className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold">Verify email</Button>
+              <Button onClick={prepareAccount} disabled={busy} className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold">
+                {busy ? "Preparing account…" : user?.email?.address ? "Create secure wallet" : "Link recovery email"}
+              </Button>
             </div>
           )}
 
-          {step === 2 && (
+          {currentStep === 2 && (
             <div>
               <span className="verse-gradient mx-auto grid size-16 place-items-center rounded-full text-white"><Sparkles className="size-7" /></span>
               <div className="mt-6 text-center">
@@ -245,23 +326,36 @@ export function VerseOnboarding() {
                 <div className="flex h-16 items-center rounded-2xl border bg-background/50 px-4 focus-within:ring-2 focus-within:ring-ring/40">
                   <input
                     value={username}
-                    onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                    onChange={(event) => {
+                      setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""));
+                      setAvailable(null);
+                    }}
                     className="min-w-0 flex-1 bg-transparent text-xl font-extrabold outline-none"
                   />
                   <span className="text-xl font-extrabold text-muted-foreground">.verse</span>
                 </div>
               </label>
               <div className="mt-3 flex items-center justify-between text-xs">
-                <span className="font-semibold text-emerald-500">{checking ? "Checking availability…" : (username || "username") + ".verse is available"}</span>
+                <span className={cn("font-semibold", available === false ? "text-rose-400" : "text-emerald-500")}>
+                  {checking
+                    ? "Checking availability…"
+                    : !username
+                      ? "Enter a name"
+                      : available === true
+                        ? `${username}.verse is available`
+                        : available === false
+                          ? `${username}.verse is already taken`
+                          : "Availability not checked"}
+                </span>
                 <span className="text-muted-foreground">Free</span>
               </div>
-              <Button onClick={next} disabled={!username || checking} className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold disabled:opacity-50">
-                {checking ? "Claiming…" : "Claim " + (username || "username") + ".verse"}
+              <Button onClick={claimDomain} disabled={!username || checking || available !== true || busy} className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold disabled:opacity-50">
+                {busy ? "Claiming…" : "Claim " + (username || "username") + ".verse"}
               </Button>
             </div>
           )}
 
-          {step === 3 && (
+          {currentStep === 3 && (
             <div className="py-2 text-center">
               <div className="relative mx-auto w-fit">
                 <span className="verse-gradient grid size-20 place-items-center rounded-full text-white shadow-[0_18px_55px_rgba(185,0,255,.26)]"><Check className="size-9 stroke-[3]" /></span>
@@ -270,14 +364,14 @@ export function VerseOnboarding() {
               <h2 className="mt-7 text-3xl font-extrabold tracking-[-0.055em]">You’re ready</h2>
               <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">Your name and embedded wallet have been created.</p>
               <div className="mt-7 rounded-[24px] border bg-background/50 p-5">
-                <p className="verse-gradient-text text-3xl font-extrabold tracking-[-0.055em]">{username}.verse</p>
+                <p className="verse-gradient-text text-3xl font-extrabold tracking-[-0.055em]">{claimedName || `${username}.verse`}</p>
                 <div className="mt-4 flex justify-center gap-2">
                   <span className="rounded-full border px-3 py-1.5 text-xs font-bold">
                     {loginMethod === "email"
-                      ? email
+                      ? verifiedEmail
                       : loginMethod === "x"
-                        ? "𝕏 @kingsleyx"
-                        : "Telegram @kingsleyverse"}
+                        ? `𝕏 @${user?.twitter?.username ?? "linked"}`
+                        : `Telegram @${user?.telegram?.username ?? "linked"}`}
                   </span>
                   <span className="rounded-full border px-3 py-1.5 text-xs font-bold text-emerald-500">Verified</span>
                 </div>
@@ -285,8 +379,8 @@ export function VerseOnboarding() {
               <div className="mt-4 flex items-center gap-3 rounded-2xl bg-accent/55 p-3 text-left">
                 <ShieldCheck className="size-5 shrink-0 text-primary" />
                 <div>
-                  <p className="text-xs font-bold">Privy wallet created</p>
-                  <p className="text-[11px] text-muted-foreground">Protected by Privy authentication and verified email recovery</p>
+                  <p className="text-xs font-bold">Privy wallet secured</p>
+                  <p className="text-[11px] text-muted-foreground">Protected by the server wallet policy and verified email recovery</p>
                 </div>
               </div>
               <Button asChild className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold">
@@ -295,10 +389,15 @@ export function VerseOnboarding() {
             </div>
           )}
 
-          {step > 0 && step < 3 && (
+          {currentStep > 0 && currentStep < 3 && (
             <button type="button" onClick={() => setStep((current) => current - 1)} className="mt-5 flex w-full items-center justify-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground">
               <ChevronLeft className="size-3.5" /> Back
             </button>
+          )}
+          {error && (
+            <div role="alert" className="mt-5 rounded-2xl border border-rose-500/20 bg-rose-500/8 p-3 text-center text-xs font-semibold text-rose-300">
+              {error}
+            </div>
           )}
         </section>
       </div>

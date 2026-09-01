@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { VerseLogo } from "@/components/verse-logo";
+import { friendlyApiError, verseApi } from "@/lib/client/verse-api";
 
 type Asset = "USDC" | "VERSE";
 type SendStep = "details" | "review" | "sending" | "success";
@@ -90,12 +91,30 @@ function Action({
   );
 }
 
-export function SendFlow() {
+type PaymentQuote = {
+  recipient: { provider: "verse" | "x" | "telegram"; handle: string };
+  asset: Asset;
+  amount: string;
+  sponsored: boolean;
+  executionEnabled: boolean;
+};
+
+export function SendFlow({
+  authenticated = false,
+  onSignIn,
+  getAccessToken,
+}: {
+  authenticated?: boolean;
+  onSignIn?: () => void;
+  getAccessToken?: () => Promise<string | null>;
+}) {
   const [step, setStep] = useState<SendStep>("details");
   const [asset, setAsset] = useState<Asset>("USDC");
   const [recipient, setRecipient] = useState("maya.verse");
   const [amount, setAmount] = useState("120");
   const [note, setNote] = useState("Dinner");
+  const [quote, setQuote] = useState<PaymentQuote | null>(null);
+  const [error, setError] = useState("");
 
   const reset = () => {
     setStep("details");
@@ -103,13 +122,45 @@ export function SendFlow() {
     setRecipient("maya.verse");
     setAmount("120");
     setNote("Dinner");
+    setQuote(null);
+    setError("");
   };
 
-  const advance = () => {
-    if (step === "details") setStep("review");
+  const advance = async () => {
+    setError("");
+    if (!authenticated || !getAccessToken) {
+      onSignIn?.();
+      return;
+    }
+    if (step === "details") {
+      try {
+        const result = await verseApi<PaymentQuote>("/api/payments/quote", getAccessToken, {
+          method: "POST",
+          body: JSON.stringify({ recipient, asset, amount }),
+        });
+        setQuote(result);
+        setStep("review");
+      } catch (requestError) {
+        setError(friendlyApiError(requestError));
+      }
+    }
     if (step === "review") {
+      if (!quote?.executionEnabled) {
+        setError("Live payments are locked until the wallet policy and mainnet activation settings are complete.");
+        return;
+      }
       setStep("sending");
-      window.setTimeout(() => setStep("success"), 1100);
+      try {
+        await verseApi<{ payment: { id: string; status: string } }>("/api/payments", getAccessToken, {
+          method: "POST",
+          headers: { "idempotency-key": crypto.randomUUID() },
+          body: JSON.stringify({ recipient, asset, amount }),
+        });
+        setStep("success");
+      } catch (requestError) {
+        setStep("review");
+        setError(friendlyApiError(requestError));
+      }
     }
   };
 
@@ -127,7 +178,7 @@ export function SendFlow() {
             <DialogHeader>
               <div className="mb-2 flex items-center justify-between pr-8">
                 <Badge variant="outline" className="border-primary/20 bg-primary/8 text-primary">
-                  Demo on Polygon Amoy
+                  Gasless on Polygon
                 </Badge>
                 <span className="text-xs text-muted-foreground">
                   1 of 2
@@ -159,15 +210,8 @@ export function SendFlow() {
                   <CheckCircle2 className="size-4 text-emerald-500" />
                 </div>
               </label>
-              <div className="flex items-center gap-3 rounded-2xl border bg-accent/55 p-3">
-                <InitialAvatar initials="MC" tone="from-fuchsia-500 to-violet-600" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold">Maya Chen</p>
-                  <p className="truncate text-xs text-muted-foreground">maya.verse · @mayac</p>
-                </div>
-                <Badge className="bg-emerald-500/12 text-emerald-500">
-                  <Check className="size-3" /> Verified
-                </Badge>
+              <div className="flex items-center gap-3 rounded-2xl border bg-accent/55 p-3 text-xs text-muted-foreground">
+                <CheckCircle2 className="size-4 text-emerald-500" /> Exact-name search only. The recipient is verified before approval.
               </div>
               <div>
                 <span className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
@@ -193,7 +237,7 @@ export function SendFlow() {
                     </button>
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    {asset === "USDC" ? "≈ $120.00 · 1,274.50 available" : "≈ $0.86 · 43,820 available"}
+                    Balance is checked before the payment is submitted.
                   </p>
                 </div>
               </div>
@@ -209,8 +253,9 @@ export function SendFlow() {
                 />
               </label>
               <Button onClick={advance} className="verse-gradient h-12 w-full rounded-2xl border-0 text-base font-bold">
-                Continue
+                {authenticated ? "Continue" : "Sign in to continue"}
               </Button>
+              {error && <p role="alert" className="rounded-2xl bg-rose-500/10 p-3 text-center text-xs font-semibold text-rose-300">{error}</p>}
             </div>
           )}
 
@@ -220,12 +265,12 @@ export function SendFlow() {
                 <InitialAvatar initials="MC" tone="from-fuchsia-500 to-violet-600" className="size-12 ring-white/10" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <p className="truncate text-sm font-extrabold">Maya Chen</p>
+                    <p className="truncate text-sm font-extrabold">{quote?.recipient.handle ?? recipient}</p>
                     <span className="grid size-4 place-items-center rounded-full verse-gradient">
                       <Check className="size-2.5 stroke-[3] text-white" />
                     </span>
                   </div>
-                  <p className="mt-0.5 truncate text-xs text-white/40">{recipient} · verified</p>
+                  <p className="mt-0.5 truncate text-xs text-white/40">{quote?.recipient.provider ?? "identity"} · verified</p>
                 </div>
                 <button
                   type="button"
@@ -258,7 +303,7 @@ export function SendFlow() {
               <div className="divide-y divide-white/[.065] border-y border-white/[.065] text-sm">
                 <div className="flex items-center justify-between gap-4 py-4">
                   <span className="text-white/40">Balance</span>
-                  <span className="font-bold">{asset === "USDC" ? "1,274.50 USDC" : "43,820 VERSE"}</span>
+                  <span className="font-bold">Checked at submission</span>
                 </div>
                 <div className="flex items-center justify-between gap-4 py-4">
                   <span className="text-white/40">Note</span>
@@ -278,6 +323,7 @@ export function SendFlow() {
                   Pay
                 </Button>
               </div>
+              {error && <p role="alert" className="mt-4 rounded-2xl bg-rose-500/10 p-3 text-center text-xs font-semibold text-rose-300">{error}</p>}
             </div>
           )}
 
@@ -300,7 +346,7 @@ export function SendFlow() {
               </div>
               <DialogTitle className="mt-6 text-3xl tracking-[-0.05em]">Payment sent</DialogTitle>
               <DialogDescription className="mt-2">
-                Demo complete. No real funds moved.
+                Your sponsored Polygon payment was submitted.
               </DialogDescription>
               <p className="mt-7 text-4xl font-extrabold tracking-[-0.06em]">
                 {amount} {asset}
@@ -317,10 +363,10 @@ export function SendFlow() {
   );
 }
 
-export function ReceiveFlow() {
+export function ReceiveFlow({ username = "kingsley.verse" }: { username?: string }) {
   const [copied, setCopied] = useState(false);
   const copyName = async () => {
-    await navigator.clipboard?.writeText("kingsley.verse");
+    await navigator.clipboard?.writeText(username);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
   };
@@ -341,7 +387,7 @@ export function ReceiveFlow() {
           <QrCode className="size-full text-[#11111a]" strokeWidth={1.35} />
         </div>
         <div className="mt-3 text-center">
-          <p className="text-xl font-extrabold">kingsley.verse</p>
+          <p className="text-xl font-extrabold">{username}</p>
           <p className="mt-1 text-xs text-muted-foreground">USDC + VERSE on Polygon</p>
         </div>
         <Button onClick={copyName} className="verse-gradient mt-3 h-11 rounded-2xl border-0">

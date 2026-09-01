@@ -14,6 +14,7 @@ import {
   requiredEnv,
   assertRegistryExecutionReady,
 } from "./config";
+import { AppError } from "./errors";
 import { VERSE_NAME_REGISTRY_ABI } from "./contracts";
 
 let client: PrivyClient | undefined;
@@ -29,15 +30,21 @@ export function getPrivyClient() {
 }
 
 export async function createEmbeddedWallet(privyUserId: string, internalUserId: string) {
+  const walletPolicyId = optionalEnv("PRIVY_WALLET_POLICY_ID");
+  if (!walletPolicyId) {
+    throw new AppError(
+      503,
+      "WALLET_POLICY_NOT_CONFIGURED",
+      "Wallet creation is paused until the Privy wallet policy is configured.",
+    );
+  }
   const wallet = await getPrivyClient().wallets().create({
     chain_type: "ethereum",
     owner: { user_id: privyUserId },
     display_name: ".verse wallet",
     external_id: `verse_${internalUserId.replace(/[^a-zA-Z0-9_-]/g, "_")}`.slice(0, 64),
     idempotency_key: `wallet_${internalUserId}`.slice(0, 64),
-    ...(optionalEnv("PRIVY_WALLET_POLICY_ID")
-      ? { policy_ids: [requiredEnv("PRIVY_WALLET_POLICY_ID")] }
-      : {}),
+    policy_ids: [walletPolicyId],
   });
   return { id: wallet.id, address: getAddress(wallet.address) };
 }
