@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useState, useSyncExternalStore, type ComponentType } from "react";
 import { emptyVerseAuth, VerseAuthContext } from "@/components/verse-auth-context";
 import { VerseLoader } from "@/components/verse-loader";
 
 type ClientConfig = { privyAppId: string };
 type RuntimeProps = { appId: string; children: React.ReactNode };
+
+const subscribeToStartupState = () => () => undefined;
 
 function PreviewAuthRuntime({ children }: RuntimeProps) {
   return (
@@ -19,6 +21,11 @@ export function VerseAuthProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<ClientConfig | null>(null);
   const [Runtime, setRuntime] = useState<ComponentType<RuntimeProps> | null>(null);
   const [failed, setFailed] = useState(false);
+  const showStartupLoader = useSyncExternalStore(
+    subscribeToStartupState,
+    () => window.sessionStorage.getItem("verse-app-ready") !== "1",
+    () => false,
+  );
 
   useEffect(() => {
     let active = true;
@@ -32,6 +39,7 @@ export function VerseAuthProvider({ children }: { children: React.ReactNode }) {
     Promise.all([configRequest, runtimeRequest])
       .then(([value, PrivyRuntime]) => {
         if (!active) return;
+        window.sessionStorage.setItem("verse-app-ready", "1");
         setConfig(value);
         setRuntime(() => PrivyRuntime);
       })
@@ -55,7 +63,7 @@ export function VerseAuthProvider({ children }: { children: React.ReactNode }) {
   if (!config || !Runtime) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#080910] text-white">
-        <VerseLoader className="size-20" />
+        {showStartupLoader && <VerseLoader className="size-20" />}
       </main>
     );
   }
