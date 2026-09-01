@@ -1,8 +1,8 @@
 import { requireUser } from "@/lib/backend/auth";
-import { claimFreeDomain } from "@/lib/backend/domains";
+import { purchaseAdditionalDomain } from "@/lib/backend/domain-purchase";
 import { errorResponse, json, readJson } from "@/lib/backend/http";
-import { domainNameSchema } from "@/lib/backend/validation";
 import { enforceRateLimit } from "@/lib/backend/rate-limit";
+import { domainPurchaseSchema } from "@/lib/backend/validation";
 
 export const runtime = "edge";
 
@@ -10,18 +10,18 @@ export async function POST(request: Request) {
   try {
     const auth = await requireUser(request);
     await enforceRateLimit({
-      bucket: "domain_claim",
+      bucket: "domain_purchase",
       subject: auth.user.id,
       limit: 5,
       windowSeconds: 3600,
     });
-    const input = domainNameSchema.parse(await readJson(request));
-    const domain = await claimFreeDomain({
+    const input = domainPurchaseSchema.parse(await readJson(request));
+    const order = await purchaseAdditionalDomain({
+      accessToken: auth.accessToken,
       userId: auth.user.id,
-      walletAddress: auth.user.walletAddress,
-      rawName: input.name,
+      quoteToken: input.quoteToken,
     });
-    return json({ domain }, { status: 201 });
+    return json({ order }, { status: 202 });
   } catch (error) {
     return errorResponse(error);
   }

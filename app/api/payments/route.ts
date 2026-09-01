@@ -4,6 +4,7 @@ import { AppError } from "@/lib/backend/errors";
 import { errorResponse, json, readJson } from "@/lib/backend/http";
 import { createPayment, listPayments } from "@/lib/backend/payments";
 import { paymentSchema } from "@/lib/backend/validation";
+import { enforceRateLimit } from "@/lib/backend/rate-limit";
 
 export const runtime = "edge";
 
@@ -12,6 +13,12 @@ const IDEMPOTENCY_KEY = /^[a-zA-Z0-9._:-]{8,100}$/;
 export async function POST(request: Request) {
   try {
     const auth = await requireUser(request);
+    await enforceRateLimit({
+      bucket: "payment_create",
+      subject: auth.user.id,
+      limit: 25,
+      windowSeconds: 60,
+    });
     const idempotencyKey = request.headers.get("idempotency-key")?.trim();
     if (!idempotencyKey || !IDEMPOTENCY_KEY.test(idempotencyKey)) {
       throw new AppError(

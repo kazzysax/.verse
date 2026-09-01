@@ -1,18 +1,32 @@
 import { and, desc, eq, or } from "drizzle-orm";
 import { formatUnits, getAddress, parseUnits } from "viem";
-import { notifications, payments, users } from "@/db/schema";
+import {
+  chainOperations,
+  gasSponsorships,
+  notifications,
+  payments,
+  users,
+} from "@/db/schema";
 import { getDb } from "@/db";
 import {
   activeChain,
+  assertPaymentExecutionReady,
   DAILY_SPONSORED_PAYMENT_LIMIT,
-  executionMode,
+  paymentExecutionReadiness,
   type PaymentAsset,
   tokenFor,
 } from "./config";
 import { AppError } from "./errors";
-import { releaseSponsoredPayment, reserveSponsoredPayment, sponsoredUsage } from "./gas-policy";
+import {
+  markOperationSubmissionError,
+  markOperationSubmitted,
+  operationRecord,
+} from "./chain-operations";
+import { sponsorshipRecord, sponsoredUsage } from "./gas-policy";
 import { resolveRecipient, type IdentityProvider } from "./identity";
 import { sendSponsoredErc20Transfer } from "./privy";
+import { classifySubmissionError } from "./provider-errors";
+import { recordAudit } from "./audit";
 
 export async function quotePayment(input: {
   senderUserId: string;
@@ -40,7 +54,7 @@ export async function quotePayment(input: {
     tokenAddress: token.address,
     chainId: activeChain().chainId,
     sponsored: true,
-    executionEnabled: executionMode() !== "disabled",
+    executionEnabled: paymentExecutionReadiness().ready,
     dailySponsoredRemaining: Math.max(0, DAILY_SPONSORED_PAYMENT_LIMIT - used),
   };
 }
@@ -54,9 +68,7 @@ export async function createPayment(input: {
   amount: string;
   idempotencyKey: string;
 }) {
-  if (executionMode() === "disabled") {
-    throw new AppError(503, "LIVE_EXECUTION_DISABLED", "Payment execution is not active yet.");
-  }
+  assertPaymentExecutionReady();
   const db = getDb();
   const sender = await getUser(input.senderUserId);
   if (!sender.walletAddress || !sender.privyWalletId) {
@@ -87,6 +99,8 @@ export async function createPayment(input: {
   const amountAtomic = parsePaymentAmount(input.amount, token.decimals);
   const now = new Date().toISOString();
   const paymentId = crypto.randomUUID();
+  const operationId = crypto.randomUUID();
+  const providerRequestId = `pay_${operationId.replaceAll("-", "")}`;
   const record: typeof payments.$inferInsert = {
     id: paymentId,
     senderUserId: sender.id,
@@ -103,12 +117,59 @@ export async function createPayment(input: {
     status: "authorized",
     sponsored: true,
     idempotencyKey: input.idempotencyKey,
+    chainOperationId: operationId,
     createdAt: now,
     updatedAt: now,
   };
 
-  await db.insert(payments).values(record);
-  await reserveSponsoredPayment(sender.id);
+  try {
+    await db.batch([
+      db.insert(chainOperations).values(
+        operationRecord({
+          id: operationId,
+          userId: sender.id,
+          kind: "p2p_payment",
+          aggregateId: paymentId,
+          walletId: sender.privyWalletId,
+          providerRequestId,
+          now: new Date(now),
+        }),
+      ),
+      db.insert(payments).values(record),
+      db.insert(gasSponsorships).values(
+        sponsorshipRecord(operationId, sender.id, new Date(now)),
+      ),
+    ]);
+    await safeAudit({
+      actorUserId: sender.id,
+      action: "payment.create",
+      resourceType: "payment",
+      resourceId: paymentId,
+      outcome: "accepted",
+      metadata: { asset: input.asset, chainId: activeChain().chainId, sponsored: true },
+    });
+  } catch (error) {
+    const [concurrent] = await db
+      .select()
+      .from(payments)
+      .where(
+        and(
+          eq(payments.senderUserId, sender.id),
+          eq(payments.idempotencyKey, input.idempotencyKey),
+        ),
+      )
+      .limit(1);
+    if (concurrent) return presentPayment(concurrent);
+    if (String(error).includes("DAILY_SPONSORED_LIMIT")) {
+      throw new AppError(
+        429,
+        "DAILY_GAS_LIMIT_REACHED",
+        `The daily sponsored-payment limit of ${DAILY_SPONSORED_PAYMENT_LIMIT} has been reached.`,
+      );
+    }
+    throw error;
+  }
+
   try {
     const sent = await sendSponsoredErc20Transfer({
       accessToken: input.accessToken,
@@ -116,37 +177,79 @@ export async function createPayment(input: {
       tokenAddress: token.address,
       recipientAddress: recipientWallet,
       amountAtomic,
-      idempotencyKey: input.idempotencyKey,
+      providerRequestId,
     });
     const submittedAt = new Date().toISOString();
+    await markOperationSubmitted({
+      operationId,
+      txHash: sent.txHash,
+    });
     await db
       .update(payments)
       .set({
         status: "submitted",
         txHash: sent.txHash,
-        providerReferenceId: sent.referenceId,
         submittedAt,
         updatedAt: submittedAt,
       })
       .where(eq(payments.id, paymentId));
-    await createPaymentNotifications(paymentId, sender.id, recipient.userId, input.asset, record.amountDisplay);
+    try {
+      await createPaymentNotifications(paymentId, sender.id, recipient.userId, input.asset, record.amountDisplay);
+    } catch (notificationError) {
+      console.error("Payment submitted but notification creation failed", notificationError);
+    }
+    await safeAudit({
+      actorUserId: sender.id,
+      action: "payment.submit",
+      resourceType: "payment",
+      resourceId: paymentId,
+      outcome: "succeeded",
+      metadata: { asset: input.asset, chainId: activeChain().chainId },
+    });
   } catch (error) {
-    await releaseSponsoredPayment(sender.id);
+    const classified = classifySubmissionError(error);
+    await markOperationSubmissionError({ operationId, ...classified });
     const failedAt = new Date().toISOString();
     await db
       .update(payments)
       .set({
-        status: "failed",
-        failureCode: error instanceof AppError ? error.code : "PROVIDER_ERROR",
-        failureMessage: "The transaction was not submitted.",
+        status: classified.outcome === "definite_failure" ? "failed" : "unknown",
+        failureCode: classified.code,
+        failureMessage:
+          classified.outcome === "definite_failure"
+            ? "The transaction was rejected before broadcast."
+            : "Submission is being reconciled; do not retry with a new idempotency key.",
         updatedAt: failedAt,
       })
       .where(eq(payments.id, paymentId));
-    throw error;
+    await safeAudit({
+      actorUserId: sender.id,
+      action: "payment.submit",
+      resourceType: "payment",
+      resourceId: paymentId,
+      outcome: classified.outcome === "definite_failure" ? "failed" : "unknown",
+      metadata: { code: classified.code, asset: input.asset },
+    });
+    if (classified.outcome === "definite_failure") {
+      throw new AppError(
+        502,
+        "PAYMENT_SUBMISSION_REJECTED",
+        "The payment provider rejected the transaction.",
+        { paymentId },
+      );
+    }
   }
 
   const [created] = await db.select().from(payments).where(eq(payments.id, paymentId)).limit(1);
   return presentPayment(created);
+}
+
+async function safeAudit(input: Parameters<typeof recordAudit>[0]) {
+  try {
+    await recordAudit(input);
+  } catch (auditError) {
+    console.error("Audit record failed", auditError);
+  }
 }
 
 export async function listPayments(userId: string, limit = 25) {

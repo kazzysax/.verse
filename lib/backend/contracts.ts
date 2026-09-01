@@ -6,6 +6,7 @@ export const VERSE_NAME_REGISTRY_ABI = [
     inputs: [
       { name: "to", type: "address" },
       { name: "label", type: "string" },
+      { name: "requestId", type: "bytes32" },
     ],
     outputs: [{ name: "tokenId", type: "uint256" }],
   },
@@ -23,6 +24,7 @@ export const VERSE_NAME_REGISTRY_ABI = [
       { name: "tokenId", type: "uint256", indexed: true },
       { name: "label", type: "string", indexed: false },
       { name: "owner", type: "address", indexed: true },
+      { name: "requestId", type: "bytes32", indexed: true },
     ],
   },
 ] as const;

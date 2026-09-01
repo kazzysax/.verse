@@ -8,6 +8,20 @@
       "when": 1788246343903,
       "tag": "0000_polite_skullbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788248831139,
+      "tag": "0001_spooky_christian_walker",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788249500398,
+      "tag": "0002_mute_roland_deschain",
+      "breakpoints": true
     }
   ]
 }

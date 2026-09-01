@@ -23,16 +23,18 @@ async function migrationSql() {
   const files = (await readdir(path.join(root, "drizzle")))
     .filter((name) => name.endsWith(".sql"))
     .sort();
-  assert.equal(files.length, 1, "expected one initial migration");
-  return readFile(path.join(root, "drizzle", files[0]), "utf8");
+  assert.ok(files.length >= 1, "expected at least one migration");
+  return Promise.all(files.map((file) => readFile(path.join(root, "drizzle", file), "utf8")));
 }
 
 async function migratedDatabase() {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys = ON");
-  const sql = await migrationSql();
-  for (const statement of sql.split("--> statement-breakpoint")) {
-    if (statement.trim()) db.exec(statement);
+  const migrations = await migrationSql();
+  for (const sql of migrations) {
+    for (const statement of sql.split("--> statement-breakpoint")) {
+      if (statement.trim()) db.exec(statement);
+    }
   }
   return db;
 }
@@ -44,8 +46,13 @@ test("migration creates the durable backend tables and lookup indexes", async ()
     .all()
     .map((row) => row.name);
   assert.deepEqual(tables, [
+    "api_rate_limits",
+    "audit_events",
+    "chain_operations",
     "contacts",
+    "domain_orders",
     "domains",
+    "gas_sponsorships",
     "gas_usage",
     "identities",
     "notifications",
@@ -60,7 +67,10 @@ test("migration creates the durable backend tables and lookup indexes", async ()
     .map((row) => row.name);
   assert.ok(indexes.includes("identities_verified_lookup_idx"));
   assert.ok(indexes.includes("payments_sender_idempotency_unique"));
-  assert.ok(indexes.includes("gas_usage_user_day_unique"));
+  assert.ok(indexes.includes("chain_operations_provider_request_unique"));
+  assert.ok(indexes.includes("domain_orders_quote_unique"));
+  const userColumns = db.prepare("PRAGMA table_info(users)").all().map((row) => row.name);
+  assert.ok(userColumns.includes("free_domain_claimed_at"));
   db.close();
 });
 
@@ -70,20 +80,30 @@ test("sponsored gas reservation cannot exceed 20 payments per UTC day", async ()
   db.prepare(
     "INSERT INTO users (id, privy_user_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
   ).run("user-1", "did:privy:test", now, now);
+  const createOperation = db.prepare(
+    `INSERT INTO chain_operations
+       (id, user_id, kind, aggregate_id, wallet_id, provider_request_id, status, attempt_count, created_at, updated_at)
+     VALUES (?, 'user-1', 'p2p_payment', ?, 'wallet-1', ?, 'created', 0, ?, ?)`,
+  );
   const reserve = db.prepare(
-    `INSERT INTO gas_usage (id, user_id, day_key, count, created_at, updated_at)
-     VALUES (?, ?, ?, 1, ?, ?)
-     ON CONFLICT(user_id, day_key) DO UPDATE SET
-       count = count + 1,
-       updated_at = excluded.updated_at
-     WHERE gas_usage.count < ?
-     RETURNING count`,
+    `INSERT INTO gas_sponsorships
+       (operation_id, user_id, day_key, status, created_at, updated_at)
+     VALUES (?, 'user-1', '2026-09-01', 'reserved', ?, ?)`,
   );
   for (let count = 1; count <= 20; count += 1) {
-    const row = reserve.get(`usage-${count}`, "user-1", "2026-09-01", now, now, 20);
-    assert.equal(row.count, count);
+    const id = `operation-${count}`;
+    createOperation.run(id, `payment-${count}`, `provider-${count}`, now, now);
+    reserve.run(id, now, now);
   }
-  assert.equal(reserve.get("usage-21", "user-1", "2026-09-01", now, now, 20), undefined);
+  createOperation.run("operation-21", "payment-21", "provider-21", now, now);
+  assert.throws(() => reserve.run("operation-21", now, now), /DAILY_SPONSORED_LIMIT/);
+
+  db.prepare("UPDATE gas_sponsorships SET status = 'released' WHERE operation_id = 'operation-1'").run();
+  reserve.run("operation-21", now, now);
+  assert.equal(
+    db.prepare("SELECT COUNT(*) AS count FROM gas_sponsorships WHERE status != 'released'").get().count,
+    20,
+  );
   db.close();
 });
 

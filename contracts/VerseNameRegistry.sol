@@ -2,60 +2,78 @@
 pragma solidity ^0.8.24;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ERC721Pausable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Pausable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 /// @title VerseNameRegistry
 /// @notice Transferable, lifetime .verse names. Pricing and eligibility are enforced by the registrar backend.
-contract VerseNameRegistry is ERC721, Ownable {
+contract VerseNameRegistry is ERC721, ERC721Pausable, AccessControl {
     error InvalidLabel();
     error NameAlreadyRegistered();
-    error NotRegistrar();
+    error RequestAlreadyUsed();
     error ZeroAddress();
 
-    event RegistrarChanged(address indexed previousRegistrar, address indexed newRegistrar);
-    event NameMinted(uint256 indexed tokenId, string label, address indexed owner);
+    bytes32 public constant REGISTRAR_ROLE = keccak256("REGISTRAR_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
-    address public registrar;
+    event NameMinted(
+        uint256 indexed tokenId,
+        string label,
+        address indexed owner,
+        bytes32 indexed requestId
+    );
+
     uint256 private _nextTokenId = 1;
+    string private _baseTokenURI;
     mapping(bytes32 labelHash => uint256 tokenId) private _tokenIdByLabel;
     mapping(uint256 tokenId => string label) private _labelByTokenId;
+    mapping(bytes32 requestId => bool used) public usedRequests;
 
-    modifier onlyRegistrar() {
-        if (msg.sender != registrar) revert NotRegistrar();
-        _;
-    }
-
-    constructor(address initialOwner, address initialRegistrar)
+    constructor(
+        address initialAdmin,
+        address initialRegistrar,
+        address initialPauser,
+        string memory baseTokenURI
+    )
         ERC721(".verse", "VERSE-NAME")
-        Ownable(initialOwner)
     {
-        if (initialRegistrar == address(0)) revert ZeroAddress();
-        registrar = initialRegistrar;
-        emit RegistrarChanged(address(0), initialRegistrar);
+        if (
+            initialAdmin == address(0) ||
+            initialRegistrar == address(0) ||
+            initialPauser == address(0)
+        ) revert ZeroAddress();
+        _baseTokenURI = baseTokenURI;
+        _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
+        _grantRole(REGISTRAR_ROLE, initialRegistrar);
+        _grantRole(PAUSER_ROLE, initialPauser);
     }
 
-    function setRegistrar(address newRegistrar) external onlyOwner {
-        if (newRegistrar == address(0)) revert ZeroAddress();
-        address previous = registrar;
-        registrar = newRegistrar;
-        emit RegistrarChanged(previous, newRegistrar);
-    }
-
-    function mintName(address to, string calldata label)
+    function mintName(address to, string calldata label, bytes32 requestId)
         external
-        onlyRegistrar
+        onlyRole(REGISTRAR_ROLE)
         returns (uint256 tokenId)
     {
         if (to == address(0)) revert ZeroAddress();
+        if (requestId == bytes32(0)) revert InvalidLabel();
+        if (usedRequests[requestId]) revert RequestAlreadyUsed();
         _validateLabel(bytes(label));
         bytes32 labelHash = keccak256(bytes(label));
         if (_tokenIdByLabel[labelHash] != 0) revert NameAlreadyRegistered();
 
+        usedRequests[requestId] = true;
         tokenId = _nextTokenId++;
         _tokenIdByLabel[labelHash] = tokenId;
         _labelByTokenId[tokenId] = label;
         _safeMint(to, tokenId);
-        emit NameMinted(tokenId, label, to);
+        emit NameMinted(tokenId, label, to, requestId);
+    }
+
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    function unpause() external onlyRole(PAUSER_ROLE) {
+        _unpause();
     }
 
     function ownerOfName(string calldata label) external view returns (address) {
@@ -70,6 +88,27 @@ contract VerseNameRegistry is ERC721, Ownable {
     function labelOf(uint256 tokenId) external view returns (string memory) {
         _requireOwned(tokenId);
         return _labelByTokenId[tokenId];
+    }
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721, AccessControl)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
+
+    function _update(address to, uint256 tokenId, address auth)
+        internal
+        override(ERC721, ERC721Pausable)
+        returns (address)
+    {
+        return super._update(to, tokenId, auth);
+    }
+
+    function _baseURI() internal view override returns (string memory) {
+        return _baseTokenURI;
     }
 
     function _validateLabel(bytes memory label) private pure {

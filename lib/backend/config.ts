@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { AppError } from "./errors";
 
 export const POLYGON_MAINNET_CHAIN_ID = 137;
 export const POLYGON_AMOY_CHAIN_ID = 80002;
@@ -74,4 +75,72 @@ export function tokenFor(asset: PaymentAsset) {
     throw new Error(`${asset} is not configured for ${chain.mode}`);
   }
   return token;
+}
+
+export function paymentExecutionReadiness() {
+  const missing: string[] = [];
+  for (const key of ["PRIVY_APP_ID", "PRIVY_APP_SECRET", "PRIVY_WEBHOOK_SIGNING_SECRET"]) {
+    if (!optionalEnv(key)) missing.push(key);
+  }
+  if (!optionalEnv("PRIVY_WALLET_POLICY_ID")) missing.push("PRIVY_WALLET_POLICY_ID");
+  if (!optionalEnv("RATE_LIMIT_HASH_SALT")) missing.push("RATE_LIMIT_HASH_SALT");
+  if (!optionalEnv("AUDIT_HASH_SALT")) missing.push("AUDIT_HASH_SALT");
+  if (
+    executionMode() === "mainnet" &&
+    optionalEnv("MAINNET_ACTIVATION_CONFIRMATION") !== "VERSE_MAINNET_APPROVED"
+  ) {
+    missing.push("MAINNET_ACTIVATION_CONFIRMATION");
+  }
+  return {
+    mode: executionMode(),
+    ready: executionMode() !== "disabled" && missing.length === 0,
+    missing,
+  };
+}
+
+export function registryExecutionReadiness() {
+  const payment = paymentExecutionReadiness();
+  const missing = [...payment.missing];
+  for (const key of [
+    "VERSE_REGISTRY_ADDRESS",
+    "VERSE_REGISTRAR_WALLET_ID",
+    "VERSE_REGISTRAR_POLICY_ID",
+    "VERSE_TREASURY_ADDRESS",
+    "POLYGON_RPC_URL",
+    "DOMAIN_QUOTE_SIGNING_SECRET",
+    "COINGECKO_API_KEY",
+  ]) {
+    if (!optionalEnv(key)) missing.push(key);
+  }
+  return {
+    mode: payment.mode,
+    ready: payment.mode !== "disabled" && missing.length === 0,
+    missing: [...new Set(missing)],
+  };
+}
+
+export function assertPaymentExecutionReady() {
+  const readiness = paymentExecutionReadiness();
+  if (!readiness.ready) {
+    throw new AppError(
+      503,
+      "LIVE_EXECUTION_NOT_READY",
+      "Payment execution is not fully configured.",
+      { missing: readiness.missing },
+    );
+  }
+  return readiness;
+}
+
+export function assertRegistryExecutionReady() {
+  const readiness = registryExecutionReadiness();
+  if (!readiness.ready) {
+    throw new AppError(
+      503,
+      "REGISTRY_EXECUTION_NOT_READY",
+      "The .verse registry is not fully configured.",
+      { missing: readiness.missing },
+    );
+  }
+  return readiness;
 }

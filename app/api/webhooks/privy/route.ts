@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
-import { payments, webhookEvents } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
+import { webhookEvents } from "@/db/schema";
 import { getDb } from "@/db";
 import { optionalEnv } from "@/lib/backend/config";
 import { AppError } from "@/lib/backend/errors";
 import { errorResponse, json } from "@/lib/backend/http";
 import { getPrivyClient } from "@/lib/backend/privy";
+import { reconcileTransactionEvent } from "@/lib/backend/chain-operations";
 
 export const runtime = "edge";
 
@@ -14,6 +15,8 @@ const TRANSACTION_EVENTS = new Set([
   "transaction.execution_reverted",
   "transaction.failed",
   "transaction.provider_error",
+  "transaction.replaced",
+  "transaction.still_pending",
 ]);
 
 export async function POST(request: Request) {
@@ -46,12 +49,13 @@ export async function POST(request: Request) {
 
     const db = getDb();
     const now = new Date().toISOString();
+    const payloadHash = await sha256(rawBody);
     const eventRecord = {
       id: crypto.randomUUID(),
       providerEventId: svixId,
       provider: "privy",
       type: event.type,
-      payloadHash: await sha256(rawBody),
+      payloadHash,
       status: "received" as const,
       createdAt: now,
     };
@@ -60,49 +64,57 @@ export async function POST(request: Request) {
       .values(eventRecord)
       .onConflictDoNothing()
       .returning({ id: webhookEvents.id });
-    if (!inserted.length) return json({ received: true, duplicate: true });
-
-    if (TRANSACTION_EVENTS.has(event.type) && "reference_id" in event && event.reference_id) {
-      const updates = transactionUpdate(event.type, event);
-      await db
-        .update(payments)
-        .set({ ...updates, updatedAt: now })
-        .where(eq(payments.idempotencyKey, event.reference_id));
+    let recordId = inserted[0]?.id;
+    if (!recordId) {
+      const [existing] = await db
+        .select()
+        .from(webhookEvents)
+        .where(
+          and(
+            eq(webhookEvents.provider, "privy"),
+            eq(webhookEvents.providerEventId, svixId),
+          ),
+        )
+        .limit(1);
+      if (!existing || existing.provider !== "privy" || existing.payloadHash !== payloadHash) {
+        throw new AppError(409, "WEBHOOK_EVENT_CONFLICT", "The webhook event ID conflicts with stored data.");
+      }
+      if (existing.status === "processed") {
+        return json({ received: true, duplicate: true });
+      }
+      recordId = existing.id;
     }
-    await db
-      .update(webhookEvents)
-      .set({ status: "processed", processedAt: new Date().toISOString() })
-      .where(eq(webhookEvents.id, eventRecord.id));
+
+    try {
+      if (TRANSACTION_EVENTS.has(event.type) && "reference_id" in event && event.reference_id) {
+        await reconcileTransactionEvent({
+          type: event.type,
+          referenceId: event.reference_id,
+          transactionHash:
+            "transaction_hash" in event ? event.transaction_hash : undefined,
+          transactionId:
+            "transaction_id" in event ? event.transaction_id : undefined,
+        });
+      }
+      await db
+        .update(webhookEvents)
+        .set({ status: "processed", errorMessage: null, processedAt: new Date().toISOString() })
+        .where(eq(webhookEvents.id, recordId));
+    } catch (processingError) {
+      await db
+        .update(webhookEvents)
+        .set({
+          status: "failed",
+          errorMessage: "Webhook reconciliation failed and will be retried.",
+          processedAt: null,
+        })
+        .where(eq(webhookEvents.id, recordId));
+      throw processingError;
+    }
     return json({ received: true });
   } catch (error) {
     return errorResponse(error);
   }
-}
-
-function transactionUpdate(type: string, event: { transaction_hash?: string; transaction_id?: string }) {
-  if (type === "transaction.confirmed") {
-    return {
-      status: "confirmed" as const,
-      txHash: event.transaction_hash,
-      providerReferenceId: event.transaction_id,
-      confirmedAt: new Date().toISOString(),
-    };
-  }
-  if (type === "transaction.broadcasted") {
-    return {
-      status: "submitted" as const,
-      txHash: event.transaction_hash,
-      providerReferenceId: event.transaction_id,
-      submittedAt: new Date().toISOString(),
-    };
-  }
-  return {
-    status: "failed" as const,
-    txHash: event.transaction_hash,
-    providerReferenceId: event.transaction_id,
-    failureCode: type.replace("transaction.", "").toUpperCase(),
-    failureMessage: "Privy reported that the transaction did not complete.",
-  };
 }
 
 async function sha256(value: string) {

@@ -16,6 +16,10 @@ export const domainNameSchema = z.object({
   name: z.string().trim().min(1).max(36),
 });
 
+export const domainPurchaseSchema = z.object({
+  quoteToken: z.string().trim().min(64).max(4096),
+});
+
 export const paymentSchema = resolveSchema.extend({
   asset: assetSchema,
   amount: z.string().trim().min(1).max(80),
