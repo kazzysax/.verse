@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePrivy } from "@privy-io/react-auth";
 import {
   ArrowRight,
   Check,
@@ -19,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { VerseLogo } from "@/components/verse-logo";
+import { useVerseAuth } from "@/components/verse-auth-context";
 import { friendlyApiError, verseApi } from "@/lib/client/verse-api";
 
 const steps = [
@@ -29,7 +29,7 @@ const steps = [
 ];
 
 export function VerseOnboarding() {
-  const { ready, authenticated, user, login, linkEmail, getAccessToken } = usePrivy();
+  const { ready, authenticated, user, login, linkEmail, getAccessToken } = useVerseAuth();
   const [introduced, setIntroduced] = useState(false);
   const [step, setStep] = useState(0);
   const [loginMethod, setLoginMethod] = useState<"email" | "x" | "telegram">("email");

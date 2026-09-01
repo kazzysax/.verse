@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePrivy } from "@privy-io/react-auth";
 import {
   Bell,
   Check,
@@ -18,6 +17,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { VerseLogo } from "@/components/verse-logo";
 import { ReceiveFlow, SendFlow } from "@/components/verse-dashboard";
+import { useVerseAuth } from "@/components/verse-auth-context";
 import { friendlyApiError, verseApi, VerseApiError } from "@/lib/client/verse-api";
 
 const transactions = [
@@ -78,7 +78,7 @@ function Person({
 }
 
 export function VerseDashboardV2() {
-  const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
+  const { ready, authenticated, login, logout, getAccessToken } = useVerseAuth();
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [transactionTab, setTransactionTab] = useState<"all" | "recent">("recent");
   const [profile, setProfile] = useState<Profile | null>(null);

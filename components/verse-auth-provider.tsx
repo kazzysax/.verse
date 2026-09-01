@@ -1,22 +1,39 @@
 "use client";
 
-import { PrivyProvider } from "@privy-io/react-auth";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
+import { emptyVerseAuth, VerseAuthContext } from "@/components/verse-auth-context";
 
 type ClientConfig = { privyAppId: string };
+type RuntimeProps = { appId: string; children: React.ReactNode };
+
+function PreviewAuthRuntime({ children }: RuntimeProps) {
+  return (
+    <VerseAuthContext.Provider value={{ ...emptyVerseAuth, ready: true }}>
+      {children}
+    </VerseAuthContext.Provider>
+  );
+}
 
 export function VerseAuthProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<ClientConfig | null>(null);
+  const [Runtime, setRuntime] = useState<ComponentType<RuntimeProps> | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
-    fetch("/api/client-config", { cache: "no-store" })
-      .then(async (response) => {
+    const configRequest = fetch("/api/client-config", { cache: "no-store" }).then(async (response) => {
         if (!response.ok) throw new Error("Authentication configuration unavailable");
         return response.json() as Promise<ClientConfig>;
+      });
+    const runtimeRequest = window.location.protocol === "http:" && window.location.hostname === "terminal.local"
+      ? Promise.resolve(PreviewAuthRuntime)
+      : import("@/components/privy-runtime").then((module) => module.PrivyRuntime);
+    Promise.all([configRequest, runtimeRequest])
+      .then(([value, PrivyRuntime]) => {
+        if (!active) return;
+        setConfig(value);
+        setRuntime(() => PrivyRuntime);
       })
-      .then((value) => active && setConfig(value))
       .catch(() => active && setFailed(true));
     return () => {
       active = false;
@@ -34,7 +51,7 @@ export function VerseAuthProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!config) {
+  if (!config || !Runtime) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#080910] text-white">
         <span className="verse-gradient size-10 animate-pulse rounded-full" aria-label="Loading .verse" />
@@ -42,20 +59,5 @@ export function VerseAuthProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return (
-    <PrivyProvider
-      appId={config.privyAppId}
-      config={{
-        loginMethods: ["email", "twitter", "telegram"],
-        appearance: {
-          theme: "dark",
-          accentColor: "#b548f2",
-          showWalletLoginFirst: false,
-        },
-        embeddedWallets: { ethereum: { createOnLogin: "off" } },
-      }}
-    >
-      {children}
-    </PrivyProvider>
-  );
+  return <Runtime appId={config.privyAppId}>{children}</Runtime>;
 }
