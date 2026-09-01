@@ -13,6 +13,7 @@
     "test": "npm run build && node --test --test-concurrency=1 tests/*.test.mjs",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
+    "db:load-test": "node scripts/load-test-d1.mjs",
     "contracts:compile": "node scripts/compile-registry.mjs",
     "contracts:deploy": "npm run contracts:compile && node scripts/deploy-registry.mjs"
   },

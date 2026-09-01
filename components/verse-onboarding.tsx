@@ -20,8 +20,8 @@ import { cn } from "@/lib/utils";
 import { VerseLogo } from "@/components/verse-logo";
 
 const steps = [
-  { label: "Account", icon: UserRound, detail: "Verify X or Telegram" },
-  { label: "Recovery", icon: Mail, detail: "Add a recovery email" },
+  { label: "Account", icon: UserRound, detail: "Email, X, or Telegram" },
+  { label: "Recovery", icon: Mail, detail: "Verify your email" },
   { label: "Username", icon: Sparkles, detail: "Claim your free name" },
   { label: "Wallet", icon: Wallet, detail: "Create your Privy wallet" },
 ];
@@ -29,7 +29,7 @@ const steps = [
 export function VerseOnboarding() {
   const [introduced, setIntroduced] = useState(false);
   const [step, setStep] = useState(0);
-  const [social, setSocial] = useState<"x" | "telegram">("x");
+  const [loginMethod, setLoginMethod] = useState<"email" | "x" | "telegram">("email");
   const [email, setEmail] = useState("kingsley@example.com");
   const [username, setUsername] = useState("kingsley");
   const [checking, setChecking] = useState(false);
@@ -119,7 +119,7 @@ export function VerseOnboarding() {
             Send money to people, not addresses.
           </h1>
           <p className="mt-5 max-w-md text-base leading-7 text-muted-foreground">
-            Create a memorable .verse username, connect your social identity, and receive a secure wallet automatically.
+            Create a memorable .verse username and receive a secure wallet automatically. X and Telegram are optional aliases you can connect later.
           </p>
           <div className="mt-9 space-y-4">
             {steps.map(({ label, detail, icon: Icon }, index) => (
@@ -153,42 +153,53 @@ export function VerseOnboarding() {
 
           {step === 0 && (
             <div>
-              <VerseLogo showName={false} className="mx-auto w-fit [&_svg]:size-16" />
+              <VerseLogo className="mx-auto w-fit" />
               <div className="mt-6 text-center">
                 <h2 className="text-3xl font-extrabold tracking-[-0.055em]">Create your .verse account</h2>
                 <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-                  Choose the social account people can use to find and pay you.
+                  Start with email, X, or Telegram. Social login is optional.
                 </p>
               </div>
               <div className="mt-7 space-y-3">
-                <button type="button" onClick={() => setSocial("x")} className={cn(
+                <button type="button" onClick={() => setLoginMethod("email")} className={cn(
                   "flex h-14 w-full items-center gap-4 rounded-2xl border px-4 text-left transition",
-                  social === "x" ? "border-primary/40 bg-accent" : "bg-background/45 hover:border-primary/25"
+                  loginMethod === "email" ? "border-primary/40 bg-accent" : "bg-background/45 hover:border-primary/25"
+                )}>
+                  <span className="grid size-9 place-items-center rounded-full bg-white/10 text-foreground"><Mail className="size-4" /></span>
+                  <span className="flex-1">
+                    <span className="block text-sm font-bold">Continue with email</span>
+                    <span className="block text-xs text-muted-foreground">No social account required</span>
+                  </span>
+                  {loginMethod === "email" && <CheckCircle2 className="size-5 text-primary" />}
+                </button>
+                <button type="button" onClick={() => setLoginMethod("x")} className={cn(
+                  "flex h-14 w-full items-center gap-4 rounded-2xl border px-4 text-left transition",
+                  loginMethod === "x" ? "border-primary/40 bg-accent" : "bg-background/45 hover:border-primary/25"
                 )}>
                   <span className="grid size-9 place-items-center rounded-full bg-foreground text-lg font-black text-background">𝕏</span>
                   <span className="flex-1">
                     <span className="block text-sm font-bold">Continue with X</span>
                     <span className="block text-xs text-muted-foreground">Verify your X username</span>
                   </span>
-                  {social === "x" && <CheckCircle2 className="size-5 text-primary" />}
+                  {loginMethod === "x" && <CheckCircle2 className="size-5 text-primary" />}
                 </button>
-                <button type="button" onClick={() => setSocial("telegram")} className={cn(
+                <button type="button" onClick={() => setLoginMethod("telegram")} className={cn(
                   "flex h-14 w-full items-center gap-4 rounded-2xl border px-4 text-left transition",
-                  social === "telegram" ? "border-primary/40 bg-accent" : "bg-background/45 hover:border-primary/25"
+                  loginMethod === "telegram" ? "border-primary/40 bg-accent" : "bg-background/45 hover:border-primary/25"
                 )}>
                   <span className="grid size-9 place-items-center rounded-full bg-[#27A7E7] text-white"><Send className="size-4" /></span>
                   <span className="flex-1">
                     <span className="block text-sm font-bold">Continue with Telegram</span>
                     <span className="block text-xs text-muted-foreground">Verify your Telegram username</span>
                   </span>
-                  {social === "telegram" && <CheckCircle2 className="size-5 text-primary" />}
+                  {loginMethod === "telegram" && <CheckCircle2 className="size-5 text-primary" />}
                 </button>
               </div>
               <Button onClick={next} className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold">
                 Continue <ArrowRight className="size-4" />
               </Button>
               <p className="mt-4 text-center text-[11px] leading-5 text-muted-foreground">
-                Prototype only. Live social login will be connected through Privy.
+                Privy creates the embedded wallet. Link X or Telegram only if you want people to pay those handles.
               </p>
             </div>
           )}
@@ -197,9 +208,13 @@ export function VerseOnboarding() {
             <div>
               <span className="mx-auto grid size-16 place-items-center rounded-full bg-primary/10 text-primary"><Mail className="size-7" /></span>
               <div className="mt-6 text-center">
-                <h2 className="text-3xl font-extrabold tracking-[-0.055em]">Add a recovery email</h2>
+                <h2 className="text-3xl font-extrabold tracking-[-0.055em]">
+                  {loginMethod === "email" ? "Verify your email" : "Add a recovery email"}
+                </h2>
                 <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-                  We’ll use this only to recover your account and send payment notifications.
+                  {loginMethod === "email"
+                    ? "This email signs you in, recovers your account, and receives payment notifications."
+                    : "We’ll use this only to recover your account and send payment notifications."}
                 </p>
               </div>
               <label className="mt-7 block">
@@ -257,7 +272,13 @@ export function VerseOnboarding() {
               <div className="mt-7 rounded-[24px] border bg-background/50 p-5">
                 <p className="verse-gradient-text text-3xl font-extrabold tracking-[-0.055em]">{username}.verse</p>
                 <div className="mt-4 flex justify-center gap-2">
-                  <span className="rounded-full border px-3 py-1.5 text-xs font-bold">{social === "x" ? "𝕏 @kingsleyx" : "Telegram @kingsleyverse"}</span>
+                  <span className="rounded-full border px-3 py-1.5 text-xs font-bold">
+                    {loginMethod === "email"
+                      ? email
+                      : loginMethod === "x"
+                        ? "𝕏 @kingsleyx"
+                        : "Telegram @kingsleyverse"}
+                  </span>
                   <span className="rounded-full border px-3 py-1.5 text-xs font-bold text-emerald-500">Verified</span>
                 </div>
               </div>
@@ -265,7 +286,7 @@ export function VerseOnboarding() {
                 <ShieldCheck className="size-5 shrink-0 text-primary" />
                 <div>
                   <p className="text-xs font-bold">Privy wallet created</p>
-                  <p className="text-[11px] text-muted-foreground">Protected by social login and email recovery</p>
+                  <p className="text-[11px] text-muted-foreground">Protected by Privy authentication and verified email recovery</p>
                 </div>
               </div>
               <Button asChild className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold">

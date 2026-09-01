@@ -95,12 +95,14 @@ export function SendFlow() {
   const [asset, setAsset] = useState<Asset>("USDC");
   const [recipient, setRecipient] = useState("maya.verse");
   const [amount, setAmount] = useState("120");
+  const [note, setNote] = useState("Dinner");
 
   const reset = () => {
     setStep("details");
     setAsset("USDC");
     setRecipient("maya.verse");
     setAmount("120");
+    setNote("Dinner");
   };
 
   const advance = () => {
@@ -119,31 +121,23 @@ export function SendFlow() {
           <span className="text-sm font-extrabold">Send</span>
         </button>
       </DialogTrigger>
-      <DialogContent className="glass-surface max-h-[92vh] overflow-y-auto rounded-[28px] p-0 sm:max-w-[460px]">
+      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-[30px] border-white/10 bg-[#101116] p-0 text-white shadow-[0_36px_120px_rgba(0,0,0,.7)] sm:max-w-[460px]">
         <div className="p-6 sm:p-7">
-          {step !== "success" && (
+          {step === "details" && (
             <DialogHeader>
               <div className="mb-2 flex items-center justify-between pr-8">
                 <Badge variant="outline" className="border-primary/20 bg-primary/8 text-primary">
                   Demo on Polygon Amoy
                 </Badge>
                 <span className="text-xs text-muted-foreground">
-                  {step === "review" ? "2 of 2" : "1 of 2"}
+                  1 of 2
                 </span>
               </div>
               <DialogTitle className="text-2xl tracking-[-0.04em]">
-                {step === "details"
-                  ? "Send money"
-                  : step === "review"
-                    ? "Review payment"
-                    : "Sending payment"}
+                Send money
               </DialogTitle>
               <DialogDescription>
-                {step === "details"
-                  ? "Enter an exact .verse, X, or Telegram username."
-                  : step === "review"
-                    ? "Confirm the verified recipient before you send."
-                    : "Your gasless payment is being confirmed."}
+                Enter an exact .verse, X, or Telegram username.
               </DialogDescription>
             </DialogHeader>
           )}
@@ -203,6 +197,17 @@ export function SendFlow() {
                   </p>
                 </div>
               </div>
+              <label className="block">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                  Note <span className="normal-case tracking-normal text-white/30">(optional)</span>
+                </span>
+                <input
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="What is this payment for?"
+                  className="h-12 w-full rounded-2xl border bg-white/[.035] px-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-ring/40"
+                />
+              </label>
               <Button onClick={advance} className="verse-gradient h-12 w-full rounded-2xl border-0 text-base font-bold">
                 Continue
               </Button>
@@ -210,22 +215,69 @@ export function SendFlow() {
           )}
 
           {step === "review" && (
-            <div className="mt-6 space-y-5">
-              <div className="rounded-[24px] border bg-background/60 p-6 text-center">
-                <InitialAvatar initials="MC" tone="from-fuchsia-500 to-violet-600" className="mx-auto size-14" />
-                <p className="mt-3 text-sm font-bold">Maya Chen</p>
-                <p className="text-xs text-muted-foreground">{recipient} · verified</p>
-                <p className="mt-6 text-4xl font-extrabold tracking-[-0.06em]">
+            <div className="pt-2">
+              <div className="flex items-center gap-3 border-b border-white/[.07] pb-5 pr-7">
+                <InitialAvatar initials="MC" tone="from-fuchsia-500 to-violet-600" className="size-12 ring-white/10" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate text-sm font-extrabold">Maya Chen</p>
+                    <span className="grid size-4 place-items-center rounded-full verse-gradient">
+                      <Check className="size-2.5 stroke-[3] text-white" />
+                    </span>
+                  </div>
+                  <p className="mt-0.5 truncate text-xs text-white/40">{recipient} · verified</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStep("details")}
+                  aria-label="Change recipient"
+                  className="grid size-10 place-items-center rounded-full bg-white/[.055] text-white/65 transition hover:bg-white/[.1]"
+                >
+                  <ChevronDown className="size-4" />
+                </button>
+              </div>
+
+              <div className="px-1 py-9 text-center">
+                <p className="text-4xl font-extrabold tracking-[-0.06em] sm:text-5xl">
                   {amount} {asset}
                 </p>
-                <p className="mt-1 text-sm text-muted-foreground">Network fee · $0</p>
+                <p className="mt-2 text-sm font-semibold text-white/35">
+                  {asset === "USDC" ? `≈ $${Number(amount || 0).toFixed(2)}` : "VERSE token payment"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setAsset(asset === "USDC" ? "VERSE" : "USDC")}
+                  className="mx-auto mt-5 inline-flex min-w-32 items-center gap-2 rounded-full bg-white/[.065] px-4 py-2.5 text-sm font-extrabold transition hover:bg-white/[.11]"
+                >
+                  <span className={cn("size-3 rounded-full", asset === "USDC" ? "bg-[#2775ca]" : "verse-gradient")} />
+                  <span className="flex-1 text-left">{asset}</span>
+                  <ChevronDown className="size-4 text-white/45" />
+                </button>
               </div>
-              <Button onClick={advance} className="verse-gradient h-12 w-full rounded-2xl border-0 text-base font-bold">
-                Confirm and send
-              </Button>
-              <Button onClick={() => setStep("details")} variant="ghost" className="w-full rounded-2xl">
-                Back
-              </Button>
+
+              <div className="divide-y divide-white/[.065] border-y border-white/[.065] text-sm">
+                <div className="flex items-center justify-between gap-4 py-4">
+                  <span className="text-white/40">Balance</span>
+                  <span className="font-bold">{asset === "USDC" ? "1,274.50 USDC" : "43,820 VERSE"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-4">
+                  <span className="text-white/40">Note</span>
+                  <span className="max-w-[65%] truncate font-bold">{note || "No note"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-4">
+                  <span className="text-white/40">Network fee</span>
+                  <span className="font-bold text-emerald-400">$0 · sponsored</span>
+                </div>
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                <Button onClick={() => setStep("details")} className="h-13 rounded-2xl border-0 bg-white text-base font-extrabold text-[#111218] hover:bg-white/90">
+                  Back
+                </Button>
+                <Button onClick={advance} className="verse-gradient h-13 rounded-2xl border-0 text-base font-extrabold text-white">
+                  Pay
+                </Button>
+              </div>
             </div>
           )}
 

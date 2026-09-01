@@ -2,6 +2,8 @@
 
 Gas-sponsored peer-to-peer payments on Polygon using verified `.verse`, X, or Telegram identities. The first release supports USDC and VERSE, Privy embedded wallets, one free lifetime transferable `.verse` name per verified account, $1-equivalent additional names paid in VERSE, payment links, contacts, and notifications.
 
+Users may sign up with verified email alone. X and Telegram are optional aliases that are required only when a user wants to receive payments through those handles.
+
 ## Safety model
 
 - Live transaction execution defaults to `disabled` and fails closed.
@@ -23,6 +25,7 @@ npm run dev
 npm run lint
 npm test
 npm run db:generate
+npm run db:load-test
 npm run contracts:compile
 ```
 
