@@ -122,10 +122,6 @@ body {
 
 button, a { -webkit-tap-highlight-color: transparent; }
 
-@view-transition {
-  navigation: auto;
-}
-
 .verse-gradient {
   background: linear-gradient(135deg, #20d7f2 0%, #2879f2 33%, #823af0 68%, #f000d2 100%);
 }
@@ -165,25 +161,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 
 .verse-nav-active {
-  view-transition-name: verse-nav-bubble;
   border-radius: 1.4rem 1.75rem 1.45rem 1.8rem;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.5),
     inset 8px -8px 20px rgba(69, 41, 184, 0.2),
     0 10px 30px rgba(132, 58, 240, 0.38);
-}
-
-::view-transition-group(verse-nav-bubble) {
-  animation-duration: 560ms;
-  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-::view-transition-old(verse-nav-bubble),
-::view-transition-new(verse-nav-bubble) {
-  height: 100%;
-  mix-blend-mode: normal;
-  animation-duration: 560ms;
-  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
