@@ -23,6 +23,7 @@ export const domainPurchaseSchema = z.object({
 export const paymentSchema = resolveSchema.extend({
   asset: assetSchema,
   amount: z.string().trim().min(1).max(80),
+  memo: z.string().trim().max(140).optional(),
 });
 
 export const contactSchema = z.object({

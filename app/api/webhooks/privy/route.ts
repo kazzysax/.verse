@@ -12,11 +12,13 @@ export const runtime = "edge";
 const TRANSACTION_EVENTS = new Set([
   "transaction.broadcasted",
   "transaction.confirmed",
+  "transaction.finalized",
   "transaction.execution_reverted",
   "transaction.failed",
   "transaction.provider_error",
   "transaction.replaced",
   "transaction.still_pending",
+  "transaction.pending",
 ]);
 
 export async function POST(request: Request) {

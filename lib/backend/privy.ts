@@ -84,7 +84,11 @@ export async function sendSponsoredErc20Transfer(input: {
     },
   );
 
-  return { txHash: result.hash };
+  return {
+    txHash: result.hash || null,
+    transactionId: result.transaction_id ?? null,
+    userOperationHash: result.user_operation_hash ?? null,
+  };
 }
 
 export async function sendRegistryMint(input: {
@@ -118,5 +122,21 @@ export async function sendRegistryMint(input: {
       idempotency_key: input.providerRequestId,
     },
   );
-  return { txHash: result.hash, walletId, requestId };
+  return {
+    txHash: result.hash || null,
+    transactionId: result.transaction_id ?? null,
+    userOperationHash: result.user_operation_hash ?? null,
+    walletId,
+    requestId,
+  };
+}
+
+export async function readPrivyTransaction(transactionId: string) {
+  const transaction = await getPrivyClient().transactions.get(transactionId);
+  return {
+    type: `transaction.${transaction.status}`,
+    transactionHash: transaction.transaction_hash ?? undefined,
+    transactionId: transaction.id,
+    referenceId: transaction.reference_id ?? undefined,
+  };
 }

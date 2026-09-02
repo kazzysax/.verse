@@ -136,7 +136,7 @@ export async function purchaseAdditionalDomain(input: {
       amountAtomic: BigInt(quote.priceVerseAtomic),
       providerRequestId,
     });
-    await markOperationSubmitted({ operationId: ids.operation, txHash: sent.txHash });
+    await markOperationSubmitted({ operationId: ids.operation, txHash: sent.txHash, providerTransactionId: sent.transactionId });
     await db
       .update(domainOrders)
       .set({ status: "payment_submitted", updatedAt: new Date().toISOString() })

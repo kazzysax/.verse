@@ -34,6 +34,7 @@ export async function quotePayment(input: {
   provider?: IdentityProvider;
   asset: PaymentAsset;
   amount: string;
+  memo?: string;
 }) {
   const sender = await getUser(input.senderUserId);
   const recipient = await resolveRecipient(input.recipient, input.provider);
@@ -66,6 +67,7 @@ export async function createPayment(input: {
   provider?: IdentityProvider;
   asset: PaymentAsset;
   amount: string;
+  memo?: string;
   idempotencyKey: string;
 }) {
   assertPaymentExecutionReady();
@@ -113,6 +115,7 @@ export async function createPayment(input: {
     tokenAddress: getAddress(token.address),
     amountAtomic: amountAtomic.toString(),
     amountDisplay: formatUnits(amountAtomic, token.decimals),
+    memo: input.memo || null,
     chainId: activeChain().chainId,
     status: "authorized",
     sponsored: true,
@@ -183,12 +186,14 @@ export async function createPayment(input: {
     await markOperationSubmitted({
       operationId,
       txHash: sent.txHash,
+      providerTransactionId: sent.transactionId,
     });
     await db
       .update(payments)
       .set({
         status: "submitted",
         txHash: sent.txHash,
+        providerReferenceId: sent.transactionId,
         submittedAt,
         updatedAt: submittedAt,
       })

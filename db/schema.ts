@@ -166,6 +166,7 @@ export const payments = sqliteTable(
     tokenAddress: text("token_address").notNull(),
     amountAtomic: text("amount_atomic").notNull(),
     amountDisplay: text("amount_display").notNull(),
+    memo: text("memo"),
     chainId: integer("chain_id").notNull(),
     status: text("status", {
       enum: ["created", "authorized", "submitted", "confirmed", "failed", "unknown"],

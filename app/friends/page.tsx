@@ -1,20 +1,29 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Search, Send, Star } from "lucide-react";
+import { Check, Search, Star } from "lucide-react";
 import { VersePageShell } from "@/components/verse-page-shell";
-
-const friends = [
-  { name: "Maya Chen", handle: "maya.verse", alias: "@mayac", initials: "MC", tone: "from-fuchsia-500 to-violet-600", favorite: true },
-  { name: "Tobi A.", handle: "tobi.verse", alias: "@tobiweb3", initials: "TA", tone: "from-cyan-400 to-blue-600", favorite: true },
-  { name: "Amina Bello", handle: "amina.verse", alias: "@aminab", initials: "AB", tone: "from-amber-400 to-rose-500", favorite: true },
-  { name: "Luis Perez", handle: "luis.verse", alias: "@luisp", initials: "LP", tone: "from-emerald-400 to-cyan-600", favorite: false },
-  { name: "Noah Williams", handle: "noah.verse", alias: "@noahw", initials: "NW", tone: "from-blue-400 to-indigo-600", favorite: false },
-];
+import { useVerseAccount } from "@/components/use-verse-account";
+import { SendFlow } from "@/components/verse-dashboard";
 
 export default function FriendsPage() {
+  const account = useVerseAccount();
   const [query, setQuery] = useState("");
-  const visible = useMemo(() => friends.filter((friend) => `${friend.name} ${friend.handle} ${friend.alias}`.toLowerCase().includes(query.toLowerCase())), [query]);
+  const friends = useMemo(() => account.contacts.map((contact) => {
+    const handle = contact.handles.find((item) => item.provider === "verse")?.handle ?? contact.handles[0]?.handle ?? "Verified contact";
+    const secondary = contact.handles.find((item) => item.handle !== handle)?.handle ?? "";
+    const name = contact.alias || handle.replace(".verse", "").replace("@", "");
+    return {
+      id: contact.id,
+      name,
+      handle,
+      alias: secondary,
+      initials: name.slice(0, 2).toUpperCase(),
+      tone: "from-cyan-400 via-violet-500 to-fuchsia-500",
+      favorite: contact.favorite,
+    };
+  }), [account.contacts]);
+  const visible = useMemo(() => friends.filter((friend) => `${friend.name} ${friend.handle} ${friend.alias}`.toLowerCase().includes(query.toLowerCase())), [friends, query]);
 
   return (
     <VersePageShell>
@@ -32,7 +41,7 @@ export default function FriendsPage() {
 
           <div className="mt-5 divide-y divide-white/[.06]">
             {visible.map((friend) => (
-              <div key={friend.handle} className="flex items-center gap-3 py-4">
+              <div key={friend.id} className="flex items-center gap-3 py-4">
                 <span className={`relative grid size-12 shrink-0 place-items-center rounded-full bg-gradient-to-br ${friend.tone} text-sm font-extrabold`}>
                   {friend.initials}
                   <span className="verse-gradient absolute -bottom-0.5 -right-0.5 grid size-5 place-items-center rounded-full ring-2 ring-[#13151f]"><Check className="size-3 stroke-[3]" /></span>
@@ -41,10 +50,11 @@ export default function FriendsPage() {
                   <span className="flex items-center gap-1.5"><span className="truncate text-sm font-extrabold">{friend.name}</span>{friend.favorite && <Star className="size-3.5 fill-fuchsia-300 text-fuchsia-300" />}</span>
                   <span className="mt-0.5 block truncate text-xs text-white/38">{friend.handle} · {friend.alias}</span>
                 </span>
-                <button type="button" aria-label={`Pay ${friend.name}`} className="verse-gradient grid size-11 shrink-0 place-items-center rounded-full shadow-[0_10px_25px_rgba(132,58,240,.25)]"><Send className="size-4" /></button>
+                <SendFlow authenticated={account.authenticated} onSignIn={() => account.login()} getAccessToken={account.getAccessToken} initialRecipient={friend.handle} compact />
               </div>
             ))}
-            {!visible.length && <p className="py-10 text-center text-sm text-white/40">No matching friends.</p>}
+            {!account.authenticated && <button type="button" onClick={() => account.login()} className="verse-gradient mx-auto my-9 block rounded-full px-6 py-3 text-sm font-extrabold">Sign in to view friends</button>}
+            {account.authenticated && !visible.length && <p className="py-10 text-center text-sm text-white/40">No friends saved yet.</p>}
           </div>
         </section>
       </main>

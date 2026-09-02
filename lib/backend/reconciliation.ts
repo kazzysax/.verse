@@ -3,6 +3,7 @@ import { apiRateLimits, chainOperations } from "@/db/schema";
 import { getDb } from "@/db";
 import { readTransactionState } from "./polygon";
 import { reconcileTransactionEvent } from "./chain-operations";
+import { readPrivyTransaction } from "./privy";
 
 export async function reconcileStaleOperations(now = new Date()) {
   const cutoff = new Date(now.getTime() - 2 * 60_000).toISOString();
@@ -21,7 +22,24 @@ export async function reconcileStaleOperations(now = new Date()) {
   const result = { checked: rows.length, confirmed: 0, failed: 0, unresolved: 0 };
   for (const operation of rows) {
     if (!operation.txHash) {
-      result.unresolved += 1;
+      if (!operation.providerTransactionId) {
+        result.unresolved += 1;
+        continue;
+      }
+      try {
+        const providerState = await readPrivyTransaction(operation.providerTransactionId);
+        await reconcileTransactionEvent({
+          type: providerState.type,
+          referenceId: operation.providerRequestId,
+          transactionHash: providerState.transactionHash,
+          transactionId: providerState.transactionId,
+        });
+        if (providerState.type === "transaction.confirmed" || providerState.type === "transaction.finalized") result.confirmed += 1;
+        else if (["transaction.failed", "transaction.execution_reverted", "transaction.provider_error"].includes(providerState.type)) result.failed += 1;
+        else result.unresolved += 1;
+      } catch {
+        result.unresolved += 1;
+      }
       continue;
     }
     try {

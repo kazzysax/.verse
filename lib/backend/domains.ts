@@ -183,7 +183,7 @@ export async function dispatchDomainMint(orderId: string) {
       recipientAddress: row.domain.ownerWalletAddress,
       label: row.domain.name,
     });
-    await markOperationSubmitted({ operationId, txHash: sent.txHash });
+    await markOperationSubmitted({ operationId, txHash: sent.txHash, providerTransactionId: sent.transactionId });
     await db
       .update(domains)
       .set({ mintedTxHash: sent.txHash, updatedAt: new Date().toISOString() })

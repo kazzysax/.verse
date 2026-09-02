@@ -36,7 +36,7 @@ export function operationRecord(input: {
 
 export async function markOperationSubmitted(input: {
   operationId: string;
-  txHash: string;
+  txHash?: string | null;
   providerTransactionId?: string | null;
 }) {
   const now = new Date().toISOString();
@@ -46,7 +46,7 @@ export async function markOperationSubmitted(input: {
       .update(chainOperations)
       .set({
         status: "submitted",
-        txHash: input.txHash,
+        txHash: input.txHash || null,
         providerTransactionId: input.providerTransactionId ?? null,
         attemptCount: 1,
         submittedAt: now,
@@ -180,7 +180,7 @@ export async function reconcileTransactionEvent(event: TransactionEvent) {
 }
 
 function eventState(type: string) {
-  if (type === "transaction.confirmed") {
+  if (type === "transaction.confirmed" || type === "transaction.finalized") {
     return {
       operationStatus: "confirmed" as const,
       paymentStatus: "confirmed" as const,
@@ -190,6 +190,7 @@ function eventState(type: string) {
   }
   if (
     type === "transaction.broadcasted" ||
+    type === "transaction.pending" ||
     type === "transaction.still_pending" ||
     type === "transaction.replaced"
   ) {

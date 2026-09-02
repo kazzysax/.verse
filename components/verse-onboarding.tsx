@@ -39,6 +39,7 @@ export function VerseOnboarding() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [claimedName, setClaimedName] = useState("");
+  const [claimStatus, setClaimStatus] = useState("");
 
   useEffect(() => {
     document.documentElement.dataset.theme = "dark";
@@ -108,12 +109,13 @@ export function VerseOnboarding() {
     setBusy(true);
     setError("");
     try {
-      const result = await verseApi<{ domain: { name: string } }>(
+      const result = await verseApi<{ domain: { name: string; status: string; mint?: { status?: string } } }>(
         "/api/domains/claim",
         getAccessToken,
         { method: "POST", body: JSON.stringify({ name: username }) },
       );
       setClaimedName(result.domain.name);
+      setClaimStatus(result.domain.mint?.status ?? result.domain.status);
       setStep(3);
     } catch (requestError) {
       setError(friendlyApiError(requestError));
@@ -131,7 +133,7 @@ export function VerseOnboarding() {
         <div className="pointer-events-none absolute left-1/2 top-[20vh] flex h-48 w-[72vw] max-w-[560px] -translate-x-1/2 rotate-[4deg] items-center justify-center rounded-[42px] border border-white/15 bg-[#0d101a]/45 backdrop-blur-2xl">
           <div className="text-center">
             <p className="text-xs font-semibold text-white/60">Pay anyone with a name</p>
-            <p className="verse-gradient-text mt-2 text-3xl font-extrabold tracking-[-0.06em] sm:text-5xl">maya.verse</p>
+            <p className="verse-gradient-text mt-2 text-3xl font-extrabold tracking-[-0.06em] sm:text-5xl">yourname.verse</p>
             <div className="mt-4 flex justify-center gap-2">
               <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold">USDC</span>
               <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold">VERSE</span>
@@ -158,7 +160,7 @@ export function VerseOnboarding() {
                 Get started <ArrowRight className="size-4" />
               </Button>
               <Link href="/" className="flex h-13 items-center justify-center rounded-2xl border border-white/12 px-7 text-sm font-bold text-white/75 transition hover:bg-white/[.06]">
-                Preview dashboard
+                I already have an account
               </Link>
             </div>
           </div>
@@ -361,8 +363,8 @@ export function VerseOnboarding() {
                 <span className="verse-gradient grid size-20 place-items-center rounded-full text-white shadow-[0_18px_55px_rgba(185,0,255,.26)]"><Check className="size-9 stroke-[3]" /></span>
                 <span className="absolute -bottom-1 -right-1 grid size-8 place-items-center rounded-full bg-background ring-1 ring-border"><Wallet className="size-4 text-primary" /></span>
               </div>
-              <h2 className="mt-7 text-3xl font-extrabold tracking-[-0.055em]">You’re ready</h2>
-              <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">Your name and embedded wallet have been created.</p>
+              <h2 className="mt-7 text-3xl font-extrabold tracking-[-0.055em]">Account created</h2>
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">Your embedded wallet is ready. Domain status: {claimStatus.replaceAll("_", " ") || "reserved"}.</p>
               <div className="mt-7 rounded-[24px] border bg-background/50 p-5">
                 <p className="verse-gradient-text text-3xl font-extrabold tracking-[-0.055em]">{claimedName || `${username}.verse`}</p>
                 <div className="mt-4 flex justify-center gap-2">
