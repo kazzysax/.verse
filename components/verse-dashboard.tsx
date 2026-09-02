@@ -112,7 +112,7 @@ export function SendFlow({
     }
     if (step === "review") {
       if (!quote?.executionEnabled) {
-        setError("Live payments are locked until the wallet policy and mainnet activation settings are complete.");
+        setError("Payments are not available yet. Please try again after activation.");
         return;
       }
       setStep("sending");
@@ -146,7 +146,7 @@ export function SendFlow({
             <DialogHeader>
               <div className="mb-2 flex items-center justify-between pr-8">
                 <Badge variant="outline" className="border-primary/20 bg-primary/8 text-primary">
-                  Gasless on Polygon
+                  Polygon
                 </Badge>
                 <span className="text-xs text-muted-foreground">
                   1 of 2
@@ -300,7 +300,7 @@ export function SendFlow({
               <div>
                 <VerseLoader className="mx-auto size-20" label="Sending payment" />
                 <p className="mt-6 text-xl font-bold">Sending…</p>
-                <p className="mt-2 text-sm text-muted-foreground">Gas is sponsored by .verse</p>
+                <p className="mt-2 text-sm text-muted-foreground">Confirming payment</p>
               </div>
             </div>
           )}
@@ -311,9 +311,7 @@ export function SendFlow({
                 <Check className="size-9 text-emerald-500" />
               </div>
               <DialogTitle className="mt-6 text-3xl tracking-[-0.05em]">Payment sent</DialogTitle>
-              <DialogDescription className="mt-2">
-                Your sponsored Polygon payment was submitted.
-              </DialogDescription>
+              <DialogDescription className="mt-2">Your payment was submitted.</DialogDescription>
               <p className="mt-7 text-4xl font-extrabold tracking-[-0.06em]">
                 {amount} {asset}
               </p>

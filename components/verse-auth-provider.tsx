@@ -53,8 +53,8 @@ export function VerseAuthProvider({ children }: { children: React.ReactNode }) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#080910] px-6 text-center text-white">
         <div>
-          <p className="text-xl font-extrabold">Sign-in is temporarily unavailable</p>
-          <p className="mt-2 text-sm text-white/50">The public Privy app configuration could not be loaded.</p>
+          <p className="text-xl font-extrabold">Sign-in needs setup</p>
+          <p className="mt-2 text-sm text-white/50">Refresh the page or try again shortly.</p>
         </div>
       </main>
     );

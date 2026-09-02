@@ -153,7 +153,7 @@ export function VerseOnboarding() {
               Your money moves with <span className="verse-gradient-text">your name.</span>
             </h1>
             <p className="mt-5 max-w-md text-sm leading-6 text-white/55 sm:text-base">
-              Send USDC and VERSE to a .verse username, X handle, or Telegram username—no wallet addresses to copy.
+              Send USDC and VERSE to a .verse username, X handle, or Telegram username.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Button onClick={() => setIntroduced(true)} className="verse-gradient h-13 min-w-52 rounded-2xl border-0 px-7 text-base font-bold">
