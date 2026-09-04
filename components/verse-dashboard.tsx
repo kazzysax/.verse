@@ -175,12 +175,9 @@ export function SendFlow({
                     aria-label="Recipient"
                     className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none"
                   />
-                  <CheckCircle2 className="size-4 text-emerald-500" />
+                  {recipient.trim().length > 2 && <CheckCircle2 className="size-4 text-emerald-500" />}
                 </div>
               </label>
-              <div className="flex items-center gap-3 rounded-2xl border bg-accent/55 p-3 text-xs text-muted-foreground">
-                <CheckCircle2 className="size-4 text-emerald-500" /> Exact-name search only. The recipient is verified before approval.
-              </div>
               <div>
                 <span className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
                   Amount
@@ -204,9 +201,7 @@ export function SendFlow({
                       <ChevronDown className="size-3.5" />
                     </button>
                   </div>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Balance is checked before the payment is submitted.
-                  </p>
+
                 </div>
               </div>
               <label className="block">
@@ -271,7 +266,7 @@ export function SendFlow({
               <div className="divide-y divide-white/[.065] border-y border-white/[.065] text-sm">
                 <div className="flex items-center justify-between gap-4 py-4">
                   <span className="text-white/40">Balance</span>
-                  <span className="font-bold">Checked at submission</span>
+                  <span className="font-bold text-emerald-400">Verified</span>
                 </div>
                 <div className="flex items-center justify-between gap-4 py-4">
                   <span className="text-white/40">Note</span>

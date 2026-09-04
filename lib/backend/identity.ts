@@ -20,6 +20,7 @@ export async function resolveRecipient(raw: string, provider?: IdentityProvider)
     const [result] = await db
       .select({
         domainId: domains.id,
+        domainStatus: domains.status,
         identityId: identities.id,
         userId: users.id,
         walletAddress: users.walletAddress,
@@ -36,14 +37,32 @@ export async function resolveRecipient(raw: string, provider?: IdentityProvider)
           eq(identities.normalizedHandle, target.normalized),
         ),
       )
-      .where(and(eq(domains.name, target.normalized), eq(domains.status, "active")))
+      .where(eq(domains.name, target.normalized))
       .limit(1);
     if (!result?.walletAddress) {
+      throw new AppError(404, "RECIPIENT_NOT_FOUND", "That .verse name is not registered.");
+    }
+    // Domain is reserved/pending (on-chain mint in progress) — still payable via DB record
+    if (result.domainStatus === "reserved" || result.domainStatus === "pending" || result.domainStatus === "mint_submitted") {
+      return {
+        ...result,
+        displayHandle: result.displayHandle ?? `${target.normalized}.verse`,
+        provider: target.provider,
+        normalizedHandle: target.normalized,
+      };
+    }
+    if (result.domainStatus !== "active") {
       throw new AppError(404, "RECIPIENT_NOT_FOUND", "That .verse name is not registered and active.");
     }
     const onchainOwner = getAddress(await readNameOwner(target.normalized));
     if (onchainOwner === zeroAddress) {
-      throw new AppError(409, "DOMAIN_NOT_MINTED", "That .verse name is not active on Polygon.");
+      // Name reserved in DB but not yet minted on-chain — still payable
+      return {
+        ...result,
+        displayHandle: result.displayHandle ?? `${target.normalized}.verse`,
+        provider: target.provider,
+        normalizedHandle: target.normalized,
+      };
     }
     if (
       onchainOwner.toLowerCase() !== result.recordedOwnerWallet.toLowerCase() ||

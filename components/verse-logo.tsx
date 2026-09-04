@@ -12,7 +12,7 @@ export function VerseLogo({
     <span
       aria-label=".verse"
       className={cn(
-        "inline-flex h-10 items-center gap-[0.12em] text-xl font-extrabold tracking-[-0.065em]",
+        "inline-flex items-center gap-[0.12em] text-xl font-extrabold tracking-[-0.065em]",
         className,
       )}
     >

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowLeftRight,
   Bell,
   Check,
   Send,
@@ -43,13 +44,15 @@ export function VerseDashboardV2() {
   const { authenticated, login, logout, getAccessToken } = useVerseAuth();
   const account = useVerseAccount();
   const [balanceVisible, setBalanceVisible] = useState(true);
+  const [balanceAsset, setBalanceAsset] = useState<"USDC" | "VERSE">("USDC");
   const [transactionTab, setTransactionTab] = useState<"all" | "recent">("recent");
   const total = useMemo(() => {
     if (!balanceVisible) return "••••••";
     if (!authenticated) return "Sign in";
     if (!account.balances) return "—";
-    return `${formatBalance(account.balances.balances.USDC?.amount)} USDC`;
-  }, [account.balances, authenticated, balanceVisible]);
+    const bal = account.balances.balances[balanceAsset];
+    return bal ? `${formatBalance(bal.amount)} ${balanceAsset}` : `0 ${balanceAsset}`;
+  }, [account.balances, authenticated, balanceVisible, balanceAsset]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = "dark";
@@ -142,9 +145,18 @@ export function VerseDashboardV2() {
             <div className="pointer-events-none absolute -left-24 -top-24 size-72 rounded-full bg-cyan-400/10 blur-3xl" />
             <div className="pointer-events-none absolute -right-20 top-10 size-64 rounded-full bg-fuchsia-500/10 blur-3xl" />
             <div className="relative text-center">
-              <span className="inline-flex items-center gap-2 rounded-full bg-white/[.08] px-3 py-1.5 text-xs font-bold text-white/75">
-                <span className="size-2.5 rounded-full bg-blue-500" /> USDC + VERSE
-              </span>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBalanceAsset(balanceAsset === "USDC" ? "VERSE" : "USDC")}
+                  className="flex items-center gap-1.5 rounded-full bg-white/[.08] px-3 py-1.5 text-xs font-bold text-white/75 transition hover:bg-white/[.12]"
+                  title="Switch asset"
+                >
+                  <span className="size-2.5 rounded-full bg-blue-500" />
+                  {balanceAsset}
+                  <ArrowLeftRight className="size-3 text-white/50" />
+                </button>
+              </div>
               <p className="mt-7 text-sm font-medium text-white/55">Available balance</p>
               <button type="button" onClick={() => setBalanceVisible(!balanceVisible)} className="mt-1">
                 <span className="text-5xl font-extrabold tracking-[-0.07em] sm:text-6xl">{total}</span>
@@ -153,7 +165,8 @@ export function VerseDashboardV2() {
                 {authenticated ? (
                   account.balances ? <>
                     <span>{formatBalance(account.balances.balances.USDC?.amount)} USDC</span>
-                    <span>{account.balances.balances.VERSE ? `${formatBalance(account.balances.balances.VERSE.amount)} VERSE` : "VERSE unavailable on this network"}</span>
+                    <span className="text-white/25">·</span>
+                    <span>{account.balances.balances.VERSE ? `${formatBalance(account.balances.balances.VERSE.amount)} VERSE` : "VERSE unavailable"}</span>
                   </> : <span>Balance unavailable</span>
                 ) : <span>Sign in to view your live balances</span>}
               </div>

@@ -16,6 +16,8 @@ export type VerseAuthValue = {
   login: (options?: { loginMethods?: Array<"email" | "twitter" | "telegram"> }) => void;
   logout: () => Promise<void>;
   linkEmail: () => void;
+  linkTwitter: () => void;
+  linkTelegram: () => void;
   getAccessToken: () => Promise<string | null>;
 };
 
@@ -26,6 +28,8 @@ export const emptyVerseAuth: VerseAuthValue = {
   login: () => undefined,
   logout: async () => undefined,
   linkEmail: () => undefined,
+  linkTwitter: () => undefined,
+  linkTelegram: () => undefined,
   getAccessToken: async () => null,
 };
 

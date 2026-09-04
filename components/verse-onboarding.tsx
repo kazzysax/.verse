@@ -29,7 +29,7 @@ const steps = [
 ];
 
 export function VerseOnboarding() {
-  const { ready, authenticated, user, login, linkEmail, getAccessToken } = useVerseAuth();
+  const { ready, authenticated, user, login, linkEmail, linkTwitter, linkTelegram, getAccessToken } = useVerseAuth();
   const [introduced, setIntroduced] = useState(false);
   const [step, setStep] = useState(0);
   const [loginMethod, setLoginMethod] = useState<"email" | "x" | "telegram">("email");
@@ -78,8 +78,16 @@ export function VerseOnboarding() {
       setStep(1);
       return;
     }
-    const method = loginMethod === "x" ? "twitter" : loginMethod;
-    login({ loginMethods: [method] });
+    try {
+      const method = loginMethod === "x" ? "twitter" : loginMethod;
+      login({ loginMethods: [method] });
+    } catch {
+      if (loginMethod === "x") {
+        setError("X login failed. Try email instead, then connect X from your profile.");
+      } else {
+        setError("Login failed. Please try again.");
+      }
+    }
   };
 
   const prepareAccount = async () => {
@@ -385,7 +393,34 @@ export function VerseOnboarding() {
                   <p className="text-[11px] text-muted-foreground">Protected by the server wallet policy and verified email recovery</p>
                 </div>
               </div>
-              <Button asChild className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold">
+              {/* Let email-signup users connect socials right after onboarding */}
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-bold text-muted-foreground">Connect socials so others can pay your @handle</p>
+                {!user?.twitter?.username && (
+                  <button
+                    type="button"
+                    onClick={() => linkTwitter()}
+                    className="flex h-11 w-full items-center gap-3 rounded-2xl border bg-background/40 px-4 text-sm font-bold transition hover:bg-background/70"
+                  >
+                    <span className="grid size-7 place-items-center rounded-full bg-foreground text-xs font-black text-background">𝕏</span>
+                    Connect X account
+                  </button>
+                )}
+                {!user?.telegram?.username && (
+                  <button
+                    type="button"
+                    onClick={() => linkTelegram()}
+                    className="flex h-11 w-full items-center gap-3 rounded-2xl border bg-background/40 px-4 text-sm font-bold transition hover:bg-background/70"
+                  >
+                    <span className="grid size-7 place-items-center rounded-full bg-[#27A7E7] text-white"><Send className="size-3" /></span>
+                    Connect Telegram
+                  </button>
+                )}
+                {(user?.twitter?.username || user?.telegram?.username) && (
+                  <p className="text-xs text-emerald-500">✓ Social connected</p>
+                )}
+              </div>
+              <Button asChild className="verse-gradient mt-5 h-12 w-full rounded-2xl border-0 text-base font-bold">
                 <Link href="/">Open dashboard <ArrowRight className="size-4" /></Link>
               </Button>
             </div>

@@ -12,6 +12,8 @@ function PrivyBridge({ children }: { children: React.ReactNode }) {
     login: privy.login,
     logout: privy.logout,
     linkEmail: privy.linkEmail,
+    linkTwitter: privy.linkTwitter,
+    linkTelegram: privy.linkTelegram,
     getAccessToken: privy.getAccessToken,
   };
   return <VerseAuthContext.Provider value={value}>{children}</VerseAuthContext.Provider>;
