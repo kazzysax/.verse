@@ -78,6 +78,11 @@ if [[ -n "${seed_cache}" && -d "${seed_cache}" ]]; then
   fi
 fi
 
+echo "[sites] normalizing package lock for current platform"
+npm install --package-lock-only --ignore-scripts --cache "${expected_cache}"
+
+lockfile_sha256="$(sha256sum "${SITES_PROJECT_ROOT}/package-lock.json" | awk '{print $1}')"
+
 locked_vinext_output="$({ node --input-type=module - "${SITES_PROJECT_ROOT}/package-lock.json" <<'NODE'
 import { readFile } from "node:fs/promises";
 
