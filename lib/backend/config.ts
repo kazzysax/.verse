@@ -57,6 +57,14 @@ export function executionMode(): ExecutionMode {
   return "disabled";
 }
 
+export function paymentsSponsored() {
+  return optionalEnv("PAYMENTS_GAS_MODE") === "sponsored";
+}
+
+export function registrySponsored() {
+  return optionalEnv("REGISTRY_GAS_SPONSORED") === "true";
+}
+
 export function activeChain() {
   const mode = executionMode();
   if (mode === "mainnet") {
@@ -79,12 +87,15 @@ export function tokenFor(asset: PaymentAsset) {
 
 export function paymentExecutionReadiness() {
   const missing: string[] = [];
-  for (const key of ["PRIVY_APP_ID", "PRIVY_APP_SECRET", "PRIVY_WEBHOOK_SIGNING_SECRET"]) {
+  for (const key of ["PRIVY_APP_ID", "PRIVY_APP_SECRET"]) {
     if (!optionalEnv(key)) missing.push(key);
   }
-  if (!optionalEnv("PRIVY_WALLET_POLICY_ID")) missing.push("PRIVY_WALLET_POLICY_ID");
+  if (!optionalEnv("PRIVY_WEBHOOK_SIGNING_SECRET") && optionalEnv("TRANSACTION_CONFIRMATION_MODE") !== "polling") {
+    missing.push("TRANSACTION_CONFIRMATION_MODE");
+  }
   if (!optionalEnv("RATE_LIMIT_HASH_SALT")) missing.push("RATE_LIMIT_HASH_SALT");
   if (!optionalEnv("AUDIT_HASH_SALT")) missing.push("AUDIT_HASH_SALT");
+  if (!optionalEnv("POLYGON_RPC_URL")) missing.push("POLYGON_RPC_URL");
   if (
     executionMode() === "mainnet" &&
     optionalEnv("MAINNET_ACTIVATION_CONFIRMATION") !== "VERSE_MAINNET_APPROVED"
@@ -105,10 +116,9 @@ export function registryExecutionReadiness() {
     "VERSE_REGISTRY_ADDRESS",
     "VERSE_REGISTRAR_WALLET_ID",
     "VERSE_REGISTRAR_POLICY_ID",
-    "VERSE_TREASURY_ADDRESS",
+    "VERSE_REGISTRAR_AUTHORIZATION_KEY",
+    "REGISTRY_REGISTRAR_ADDRESS",
     "POLYGON_RPC_URL",
-    "DOMAIN_QUOTE_SIGNING_SECRET",
-    "COINGECKO_API_KEY",
   ]) {
     if (!optionalEnv(key)) missing.push(key);
   }

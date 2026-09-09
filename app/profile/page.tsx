@@ -40,9 +40,9 @@ export default function ProfilePage() {
           <h1 className="mt-5 text-3xl font-extrabold tracking-[-0.055em]">{primaryName ?? (account.authenticated ? "Claim your .verse name" : ".verse profile")}</h1>
           <p className="mt-2 text-sm text-white/45">Your payment identity</p>
           {!account.authenticated && (
-            <button type="button" onClick={() => account.login({ loginMethods: ["email"] })} className="verse-gradient mt-5 rounded-full px-6 py-3 text-sm font-extrabold">
+            <Link href="/signup" className="verse-gradient mt-5 inline-flex rounded-full px-6 py-3 text-sm font-extrabold">
               Sign in to manage profile
-            </button>
+            </Link>
           )}
         </section>
 

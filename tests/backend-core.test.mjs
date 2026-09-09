@@ -15,6 +15,8 @@ const vite = await createServer({
   server: { middlewareMode: true, hmr: false },
 });
 
+const { paymentSubmissionSchema } = await vite.ssrLoadModule("/lib/backend/validation.ts");
+
 after(async () => {
   await vite.close();
 });
@@ -74,6 +76,12 @@ test("migration creates the durable backend tables and lookup indexes", async ()
   db.close();
 });
 
+test("payment submission accepts only a full transaction hash", () => {
+  const payment = { recipient: "kazzy.verse", asset: "VERSE", amount: "50", quoteToken: "a".repeat(64) };
+  assert.equal(paymentSubmissionSchema.safeParse({ ...payment, txHash: `0x${"ab".repeat(32)}` }).success, true);
+  assert.equal(paymentSubmissionSchema.safeParse({ ...payment, txHash: "0x1234" }).success, false);
+});
+
 test("sponsored gas reservation cannot exceed 20 payments per UTC day", async () => {
   const db = await migratedDatabase();
   const now = "2026-09-01T12:00:00.000Z";
@@ -126,7 +134,21 @@ test("payment execution is fail-closed and requires user authorization", async (
     readFile(path.join(root, "app/api/payments/route.ts"), "utf8"),
   ]);
   assert.match(config, /\?\? "disabled"/);
-  assert.match(privy, /sponsor:\s*true/);
+  assert.match(privy, /sponsor:\s*paymentsSponsored\(\)/);
+  assert.match(privy, /sponsor:\s*registrySponsored\(\)/);
   assert.match(privy, /user_jwts:\s*\[input\.accessToken\]/);
   assert.match(route, /Idempotency-Key header/);
+});
+
+
+test("payment snapshots cannot be forged, cross-used by another sender, or confused with domain quotes", async () => {
+  const { signPaymentSnapshot, verifyPaymentSnapshot } = await vite.ssrLoadModule("/lib/backend/payment-quote.ts");
+  const payload = { purpose: "verse-payment-v1", senderUserId: "sender", recipient: { walletAddress: "owner-at-quote" }, amountAtomic: "10000" };
+  const signed = await signPaymentSnapshot(payload, "test-only-key");
+  assert.deepEqual(await verifyPaymentSnapshot(signed, "sender", "test-only-key"), payload);
+  await assert.rejects(verifyPaymentSnapshot(signed, "other-sender", "test-only-key"));
+  await assert.rejects(verifyPaymentSnapshot(signed, "sender", "wrong-key"));
+  await assert.rejects(verifyPaymentSnapshot("x" + signed, "sender", "test-only-key"));
+  const wrongPurpose = await signPaymentSnapshot({ ...payload, purpose: "domain" }, "test-only-key");
+  await assert.rejects(verifyPaymentSnapshot(wrongPurpose, "sender", "test-only-key"));
 });

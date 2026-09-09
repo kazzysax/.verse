@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Check, Search, Star } from "lucide-react";
 import { VersePageShell } from "@/components/verse-page-shell";
 import { useVerseAccount } from "@/components/use-verse-account";
@@ -50,10 +51,10 @@ export default function FriendsPage() {
                   <span className="flex items-center gap-1.5"><span className="truncate text-sm font-extrabold">{friend.name}</span>{friend.favorite && <Star className="size-3.5 fill-fuchsia-300 text-fuchsia-300" />}</span>
                   <span className="mt-0.5 block truncate text-xs text-white/38">{friend.handle} · {friend.alias}</span>
                 </span>
-                <SendFlow authenticated={account.authenticated} onSignIn={() => account.login()} getAccessToken={account.getAccessToken} initialRecipient={friend.handle} compact />
+                <SendFlow authenticated={account.authenticated} onSignIn={() => window.location.assign("/signup")} getAccessToken={account.getAccessToken} initialRecipient={friend.handle} compact />
               </div>
             ))}
-            {!account.authenticated && <button type="button" onClick={() => account.login()} className="verse-gradient mx-auto my-9 block rounded-full px-6 py-3 text-sm font-extrabold">Sign in to view friends</button>}
+            {!account.authenticated && <Link href="/signup" className="verse-gradient mx-auto my-9 block w-fit rounded-full px-6 py-3 text-sm font-extrabold">Sign in to view friends</Link>}
             {account.authenticated && !visible.length && <p className="py-10 text-center text-sm text-white/40">No friends saved yet.</p>}
           </div>
         </section>

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { chainOperations, gasSponsorships, payments } from "@/db/schema";
 import { getDb } from "@/db";
+import { readPaymentReceipt } from "./polygon";
 import { reconcileDomainMint, reconcileDomainPayment } from "./domain-state";
 
 export type TransactionEvent = {
@@ -111,28 +112,16 @@ export async function reconcileTransactionEvent(event: TransactionEvent) {
     return { matched: true, terminal: true, ignored: true };
   }
 
-  await db.batch([
-    db
-      .update(chainOperations)
-      .set({
-        status: next.operationStatus,
-        txHash: event.transactionHash ?? operation.txHash,
-        providerTransactionId: event.transactionId ?? operation.providerTransactionId,
-        submittedAt: next.operationStatus === "submitted" ? operation.submittedAt ?? now : operation.submittedAt,
-        confirmedAt: next.operationStatus === "confirmed" ? now : operation.confirmedAt,
-        failureCode: next.failureCode,
-        failureMessage: next.failureCode
-          ? "Privy reported that the transaction did not complete."
-          : null,
-        updatedAt: now,
-      })
-      .where(eq(chainOperations.id, operation.id)),
-    db
-      .update(gasSponsorships)
-      .set({ status: next.sponsorshipStatus, updatedAt: now })
-      .where(eq(gasSponsorships.operationId, operation.id)),
-  ]);
 
+
+  if (operation.kind === "p2p_payment" && next.paymentStatus === "confirmed") {
+    const [payment] = await db.select().from(payments).where(eq(payments.id, operation.aggregateId)).limit(1);
+    const hash = event.transactionHash ?? operation.txHash;
+    if (!payment || !hash) return { matched: true, awaitingReceipt: true };
+    const receiptState = await readPaymentReceipt({ txHash: hash, senderAddress: payment.fromWallet,
+      tokenAddress: payment.tokenAddress, recipientAddress: payment.toWallet, amountAtomic: BigInt(payment.amountAtomic) });
+    if (receiptState !== "confirmed") return { matched: true, awaitingReceipt: true };
+  }
   if (operation.kind === "p2p_payment") {
     await db
       .update(payments)
@@ -176,6 +165,27 @@ export async function reconcileTransactionEvent(event: TransactionEvent) {
       failureCode: next.failureCode,
     });
   }
+  await db.batch([
+    db
+      .update(chainOperations)
+      .set({
+        status: next.operationStatus,
+        txHash: event.transactionHash ?? operation.txHash,
+        providerTransactionId: event.transactionId ?? operation.providerTransactionId,
+        submittedAt: next.operationStatus === "submitted" ? operation.submittedAt ?? now : operation.submittedAt,
+        confirmedAt: next.operationStatus === "confirmed" ? now : operation.confirmedAt,
+        failureCode: next.failureCode,
+        failureMessage: next.failureCode
+          ? "Privy reported that the transaction did not complete."
+          : null,
+        updatedAt: now,
+      })
+      .where(eq(chainOperations.id, operation.id)),
+    db
+      .update(gasSponsorships)
+      .set({ status: next.sponsorshipStatus, updatedAt: now })
+      .where(eq(gasSponsorships.operationId, operation.id)),
+  ]);
   return { matched: true, operationId: operation.id, kind: operation.kind };
 }
 

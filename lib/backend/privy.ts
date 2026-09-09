@@ -10,11 +10,11 @@ import {
 import {
   activeChain,
   assertPaymentExecutionReady,
-  optionalEnv,
   requiredEnv,
   assertRegistryExecutionReady,
+  paymentsSponsored,
+  registrySponsored,
 } from "./config";
-import { AppError } from "./errors";
 import { VERSE_NAME_REGISTRY_ABI } from "./contracts";
 
 let client: PrivyClient | undefined;
@@ -24,32 +24,39 @@ export function getPrivyClient() {
     client = new PrivyClient({
       appId: requiredEnv("PRIVY_APP_ID"),
       appSecret: requiredEnv("PRIVY_APP_SECRET"),
+      timeout: 20000,
+      maxRetries: 0,
     });
   }
   return client;
 }
 
 export async function createEmbeddedWallet(privyUserId: string, internalUserId: string) {
-  const walletPolicyId = optionalEnv("PRIVY_WALLET_POLICY_ID");
-  if (!walletPolicyId) {
-    throw new AppError(
-      503,
-      "WALLET_POLICY_NOT_CONFIGURED",
-      "Wallet creation is paused until the Privy wallet policy is configured.",
-    );
-  }
   const wallet = await getPrivyClient().wallets().create({
     chain_type: "ethereum",
     owner: { user_id: privyUserId },
     display_name: ".verse wallet",
     external_id: `verse_${internalUserId.replace(/[^a-zA-Z0-9_-]/g, "_")}`.slice(0, 64),
     idempotency_key: `wallet_${internalUserId}`.slice(0, 64),
-    policy_ids: [walletPolicyId],
   });
   return { id: wallet.id, address: getAddress(wallet.address) };
 }
 
-export async function sendSponsoredErc20Transfer(input: {
+export async function createServerTestWallet() {
+  const wallet = await getPrivyClient().wallets().create({
+    chain_type: "ethereum",
+    display_name: ".verse payment test",
+    idempotency_key: `verse_payment_test_${crypto.randomUUID()}`,
+  });
+  return { id: wallet.id, address: getAddress(wallet.address) };
+}
+
+export async function readUserWalletPolicies(walletId: string) {
+  const wallet = await getPrivyClient().wallets().get(walletId);
+  return { walletAddress: wallet.address, policyIds: wallet.policy_ids, authorizationThreshold: wallet.authorization_threshold };
+}
+
+export async function sendErc20Transfer(input: {
   accessToken: string;
   walletId: string;
   tokenAddress: string;
@@ -72,18 +79,57 @@ export async function sendSponsoredErc20Transfer(input: {
       caip2: chain.caip2,
       params: {
         transaction: {
+          chain_id: chain.chainId,
           to: getAddress(input.tokenAddress),
           data: data as Hex,
           value: "0x0",
         },
       },
-      sponsor: true,
+      sponsor: paymentsSponsored(),
       reference_id: input.providerRequestId,
       idempotency_key: input.providerRequestId,
       authorization_context: { user_jwts: [input.accessToken] },
     },
   );
 
+  return {
+    txHash: result.hash || null,
+    transactionId: result.transaction_id ?? null,
+    userOperationHash: result.user_operation_hash ?? null,
+  };
+}
+
+export async function sendServerErc20Transfer(input: {
+  walletId: string;
+  tokenAddress: string;
+  recipientAddress: string;
+  amountAtomic: bigint;
+  providerRequestId: string;
+}) {
+  assertPaymentExecutionReady();
+  const chain = activeChain();
+  const data = encodeFunctionData({
+    abi: erc20Abi,
+    functionName: "transfer",
+    args: [getAddress(input.recipientAddress), input.amountAtomic],
+  });
+  const result = await getPrivyClient().wallets().ethereum().sendTransaction(
+    input.walletId,
+    {
+      caip2: chain.caip2,
+      params: {
+        transaction: {
+          chain_id: chain.chainId,
+          to: getAddress(input.tokenAddress),
+          data: data as Hex,
+          value: "0x0",
+        },
+      },
+      sponsor: false,
+      reference_id: input.providerRequestId,
+      idempotency_key: input.providerRequestId,
+    },
+  );
   return {
     txHash: result.hash || null,
     transactionId: result.transaction_id ?? null,
@@ -112,12 +158,14 @@ export async function sendRegistryMint(input: {
       caip2: chain.caip2,
       params: {
         transaction: {
+          chain_id: chain.chainId,
           to: getAddress(requiredEnv("VERSE_REGISTRY_ADDRESS")),
           data,
           value: "0x0",
         },
       },
-      sponsor: true,
+      sponsor: registrySponsored(),
+      authorization_context: { authorization_private_keys: [requiredEnv("VERSE_REGISTRAR_AUTHORIZATION_KEY")] },
       reference_id: input.providerRequestId,
       idempotency_key: input.providerRequestId,
     },
@@ -132,7 +180,7 @@ export async function sendRegistryMint(input: {
 }
 
 export async function readPrivyTransaction(transactionId: string) {
-  const transaction = await getPrivyClient().transactions.get(transactionId);
+  const transaction = await getPrivyClient().transactions().get(transactionId);
   return {
     type: `transaction.${transaction.status}`,
     transactionHash: transaction.transaction_hash ?? undefined,

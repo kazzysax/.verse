@@ -33,6 +33,7 @@ export type VerseContact = {
 };
 
 export type VerseBalances = {
+  gasBalance?: { symbol: string; amount: string };
   chainId: number;
   network: "disabled" | "amoy" | "mainnet";
   balances: Record<"USDC" | "VERSE", { amount: string; decimals: number } | null>;
@@ -62,6 +63,7 @@ export function useVerseAccount() {
     setLoading(true);
     setError("");
     try {
+      await verseApi("/api/account/reconcile", auth.getAccessToken, { method: "POST" });
       const [me, paymentResult, contactResult, notificationResult] = await Promise.all([
         verseApi<{ profile: VerseProfile }>("/api/me", auth.getAccessToken),
         verseApi<{ payments: VersePayment[] }>("/api/payments?limit=100", auth.getAccessToken),
@@ -90,8 +92,14 @@ export function useVerseAccount() {
 
   useEffect(() => {
     if (!auth.authenticated) return;
-    const timer = window.setTimeout(() => void refresh(), 0);
-    return () => window.clearTimeout(timer);
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      await refresh();
+      if (!stopped) timer = setTimeout(poll, 15000);
+    };
+    timer = setTimeout(poll, 0);
+    return () => { stopped = true; clearTimeout(timer); };
   }, [auth.authenticated, refresh]);
 
   return { ...auth, profile, payments, contacts, notifications, balances, loading, error, refresh };

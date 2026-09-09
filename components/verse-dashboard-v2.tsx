@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -41,7 +42,7 @@ function formatBalance(value?: string | null) {
 }
 
 export function VerseDashboardV2() {
-  const { authenticated, login, logout, getAccessToken } = useVerseAuth();
+  const { authenticated, logout, getAccessToken } = useVerseAuth();
   const account = useVerseAccount();
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [balanceAsset, setBalanceAsset] = useState<"USDC" | "VERSE">("USDC");
@@ -170,10 +171,15 @@ export function VerseDashboardV2() {
                   </> : <span>Balance unavailable</span>
                 ) : <span>Sign in to view your live balances</span>}
               </div>
+              {authenticated && account.balances?.gasBalance && (
+                <p className="mt-3 text-xs text-white/55">
+                  Gas balance: {balanceVisible ? account.balances.gasBalance.amount : "••••"} POL
+                </p>
+              )}
               <div className="mt-9 grid grid-cols-3 gap-3">
-                <SendFlow authenticated={authenticated} onSignIn={() => login()} getAccessToken={getAccessToken} />
+                <SendFlow authenticated={authenticated} onSignIn={() => window.location.assign("/signup")} getAccessToken={getAccessToken} />
                 <ReceiveFlow username={primaryName ?? undefined} />
-                <DepositFlow authenticated={authenticated} onSignIn={() => login()} getAccessToken={getAccessToken} />
+                <DepositFlow authenticated={authenticated} onSignIn={() => window.location.assign("/signup")} getAccessToken={getAccessToken} />
               </div>
             </div>
           </div>

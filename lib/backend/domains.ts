@@ -9,7 +9,7 @@ import {
 import { getDb } from "@/db";
 import { AppError } from "./errors";
 import { normalizeVerseName } from "./identity-normalization";
-import { registryExecutionReadiness, requiredEnv } from "./config";
+import { assertRegistryExecutionReady, registryExecutionReadiness, requiredEnv } from "./config";
 import {
   markOperationSubmissionError,
   markOperationSubmitted,
@@ -18,7 +18,7 @@ import {
 import { sendRegistryMint } from "./privy";
 import { classifySubmissionError } from "./provider-errors";
 import { recordAudit } from "./audit";
-import { readNameOwner } from "./polygon";
+import { checkRegistryFunding, readNameOwner } from "./polygon";
 import { getAddress } from "viem";
 
 export async function checkDomain(rawName: string) {
@@ -33,8 +33,10 @@ export async function claimFreeDomain(input: {
   rawName: string;
 }) {
   if (!input.walletAddress) throw new AppError(409, "WALLET_NOT_READY", "Create the embedded wallet first.");
+  assertRegistryExecutionReady();
   const db = getDb();
   const name = normalizeVerseName(input.rawName);
+  await checkRegistryFunding(input.walletAddress, name);
   const [claimant] = await db
     .select({ freeDomainClaimedAt: users.freeDomainClaimedAt })
     .from(users)
@@ -70,8 +72,7 @@ export async function claimFreeDomain(input: {
         provider: "verse",
         normalizedHandle: name,
         displayHandle: `${name}.verse`,
-        verified: true,
-        verifiedAt: now,
+        verified: false,
         createdAt: now,
         updatedAt: now,
       }),
@@ -139,7 +140,8 @@ export async function dispatchDomainMint(orderId: string) {
   if (!readiness.ready) {
     throw new AppError(503, "REGISTRY_EXECUTION_NOT_READY", "Registry minting is not configured.");
   }
-  const operationId = crypto.randomUUID();
+  await checkRegistryFunding(row.domain.ownerWalletAddress, row.domain.name);
+  const operationId = row.order.id;
   const providerRequestId = `mint_${operationId.replaceAll("-", "")}`;
   const now = new Date().toISOString();
   const registrarWalletId = requiredEnv("VERSE_REGISTRAR_WALLET_ID");

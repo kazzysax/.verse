@@ -23,12 +23,21 @@ export async function verseApi<T>(
   getAccessToken: () => Promise<string | null>,
   init: RequestInit = {},
 ): Promise<T> {
-  const accessToken = await getAccessToken();
+  let tokenTimer: ReturnType<typeof setTimeout> | undefined;
+  const accessToken = await Promise.race([
+    getAccessToken(),
+    new Promise<never>((_, reject) => {
+      tokenTimer = setTimeout(() => reject(new VerseApiError(408, {
+        code: "AUTH_TIMEOUT", message: "Sign-in is taking too long. Refresh and sign in again.",
+      })), 15000);
+    }),
+  ]).finally(() => clearTimeout(tokenTimer));
   if (!accessToken) {
     throw new VerseApiError(401, { code: "AUTH_REQUIRED", message: "Sign in to continue." });
   }
   const response = await fetch(path, {
     ...init,
+    signal: init.signal ?? AbortSignal.timeout(45000),
     cache: "no-store",
     headers: {
       authorization: `Bearer ${accessToken}`,

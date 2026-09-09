@@ -1,5 +1,7 @@
 "use client";
 
+import { InstallVerse } from "@/components/install-verse";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -22,17 +24,29 @@ import { useVerseAuth } from "@/components/verse-auth-context";
 import { friendlyApiError, verseApi } from "@/lib/client/verse-api";
 
 const steps = [
-  { label: "Account", icon: UserRound, detail: "Email, X, or Telegram" },
-  { label: "Recovery", icon: Mail, detail: "Verify your email" },
+  { label: "Account", icon: Mail, detail: "Verify your email" },
+  { label: "Socials", icon: UserRound, detail: "Connect X or Telegram" },
   { label: "Username", icon: Sparkles, detail: "Claim your free name" },
   { label: "Wallet", icon: Wallet, detail: "Create your Privy wallet" },
 ];
 
 export function VerseOnboarding() {
-  const { ready, authenticated, user, login, linkEmail, linkTwitter, linkTelegram, getAccessToken } = useVerseAuth();
+  const {
+    ready,
+    authenticated,
+    user,
+    sendEmailCode,
+    loginWithEmailCode,
+    linkEmail,
+    linkTwitter,
+    linkTelegram,
+    getAccessToken,
+  } = useVerseAuth();
   const [introduced, setIntroduced] = useState(false);
   const [step, setStep] = useState(0);
-  const [loginMethod, setLoginMethod] = useState<"email" | "x" | "telegram">("email");
+  const [emailAddress, setEmailAddress] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [username, setUsername] = useState("");
   const [checking, setChecking] = useState(false);
   const [available, setAvailable] = useState<boolean | null>(null);
@@ -41,9 +55,42 @@ export function VerseOnboarding() {
   const [claimedName, setClaimedName] = useState("");
   const [claimStatus, setClaimStatus] = useState("");
 
+  const connectSocial = async (provider: "x" | "telegram") => {
+    setError("");
+    try { await (provider === "x" ? linkTwitter() : linkTelegram()); }
+    catch (cause) { setError(friendlyApiError(cause)); }
+  };
+
+  useEffect(() => {
+    if (step !== 3 || !claimedName || claimStatus === "active") return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        await verseApi("/api/account/reconcile", getAccessToken, { method: "POST" });
+        const result = await verseApi<{ domains: Array<{ name: string; status: string }> }>("/api/domains", getAccessToken);
+        const domain = result.domains.find((entry) => entry.name === claimedName);
+        if (!stopped && domain) setClaimStatus(domain.status);
+      } catch (cause) { if (!stopped) setError(friendlyApiError(cause)); }
+      if (!stopped) timer = setTimeout(poll, 15000);
+    };
+    timer = setTimeout(poll, 5000);
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [step, claimedName, claimStatus, getAccessToken]);
+
   useEffect(() => {
     document.documentElement.dataset.theme = "dark";
   }, []);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    const timer = window.setTimeout(() => {
+      setBusy(false);
+      setError("");
+      if (step === 0) setStep(1);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [authenticated, step]);
 
   useEffect(() => {
     if (step !== 2 || !username || !authenticated) {
@@ -71,22 +118,35 @@ export function VerseOnboarding() {
 
   const currentStep = authenticated && step === 0 ? 1 : step;
   const verifiedEmail = user?.email?.address ?? "";
+  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddress.trim().toLowerCase());
 
-  const startAuthentication = () => {
+  const startAuthentication = async () => {
     setError("");
     if (authenticated) {
       setStep(1);
       return;
     }
+    setBusy(true);
     try {
-      const method = loginMethod === "x" ? "twitter" : loginMethod;
-      login({ loginMethods: [method] });
-    } catch {
-      if (loginMethod === "x") {
-        setError("X login failed. Try email instead, then connect X from your profile.");
-      } else {
-        setError("Login failed. Please try again.");
+      if (!emailCodeSent) {
+        const email = emailAddress.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          setError("Enter a valid email address.");
+          return;
+        }
+        await sendEmailCode(email);
+        setEmailCodeSent(true);
+        return;
       }
+      if (emailCode.trim().length < 4) {
+        setError("Enter the verification code sent to your email.");
+        return;
+      }
+      await loginWithEmailCode(emailCode.trim());
+    } catch {
+      setError(emailCodeSent ? "That code could not be verified. Check it and try again." : "Could not send the code. Please try again.");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -99,12 +159,24 @@ export function VerseOnboarding() {
     }
     setBusy(true);
     try {
-      await verseApi<{ user: { walletReady: boolean } }>(
+      const result = await verseApi<{ user: { walletReady: boolean } }>(
         "/api/users/bootstrap",
         getAccessToken,
         { method: "POST", body: JSON.stringify({ recoveryEmail: verifiedEmail }) },
       );
-      setStep(2);
+      if (!result.user.walletReady) {
+        setError("Privy is still creating your wallet. Wait a moment, then tap continue again.");
+        return;
+      }
+      const existing = await verseApi<{ domains: Array<{ name: string; status: string }> }>("/api/domains", getAccessToken);
+      if (existing.domains.length) {
+        const domain = existing.domains[0];
+        setClaimedName(domain.name);
+        setClaimStatus(domain.status);
+        setStep(3);
+      } else {
+        setStep(2);
+      }
     } catch (requestError) {
       setError(friendlyApiError(requestError));
     } finally {
@@ -151,12 +223,15 @@ export function VerseOnboarding() {
 
         <header className="relative z-20 mx-auto flex max-w-[1080px] items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
           <VerseLogo className="text-white" />
-          <Link href="/" className="text-xs font-bold text-white/65 transition hover:text-white">Sign in</Link>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <InstallVerse variant="header" />
+            <Link href="/" className="shrink-0 text-sm font-bold text-white/65 transition hover:text-white">Sign in</Link>
+          </div>
         </header>
 
         <section className="relative z-20 mx-auto flex min-h-screen max-w-[1080px] flex-col justify-end px-5 pb-8 sm:px-8 sm:pb-12 lg:items-start">
           <div className="max-w-[560px]">
-            <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-cyan-300">Simple. Social. Gasless.</p>
+            <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-cyan-300">Simple. Social. Yours.</p>
             <h1 className="mt-4 text-5xl font-extrabold leading-[.98] tracking-[-0.07em] sm:text-6xl">
               Your money moves with <span className="verse-gradient-text">your name.</span>
             </h1>
@@ -239,46 +314,71 @@ export function VerseOnboarding() {
               <div className="mt-6 text-center">
                 <h2 className="text-3xl font-extrabold tracking-[-0.055em]">Create your .verse account</h2>
                 <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-                  Start with email, X, or Telegram. Social login is optional.
+                  Email is required. You can connect X and Telegram after your email is verified.
                 </p>
               </div>
               <div className="mt-7 space-y-3">
-                <button type="button" onClick={() => setLoginMethod("email")} className={cn(
-                  "flex h-14 w-full items-center gap-4 rounded-2xl border px-4 text-left transition",
-                  loginMethod === "email" ? "border-primary/40 bg-accent" : "bg-background/45 hover:border-primary/25"
-                )}>
+                <button type="button" className="flex h-14 w-full items-center gap-4 rounded-2xl border border-primary/40 bg-accent px-4 text-left transition">
                   <span className="grid size-9 place-items-center rounded-full bg-white/10 text-foreground"><Mail className="size-4" /></span>
                   <span className="flex-1">
                     <span className="block text-sm font-bold">Continue with email</span>
-                    <span className="block text-xs text-muted-foreground">No social account required</span>
+                    <span className="block text-xs text-muted-foreground">Required for signup and recovery</span>
                   </span>
-                  {loginMethod === "email" && <CheckCircle2 className="size-5 text-primary" />}
+                  <CheckCircle2 className="size-5 text-primary" />
                 </button>
-                <button type="button" onClick={() => setLoginMethod("x")} className={cn(
-                  "flex h-14 w-full items-center gap-4 rounded-2xl border px-4 text-left transition",
-                  loginMethod === "x" ? "border-primary/40 bg-accent" : "bg-background/45 hover:border-primary/25"
-                )}>
-                  <span className="grid size-9 place-items-center rounded-full bg-foreground text-lg font-black text-background">𝕏</span>
+                <button type="button" disabled className="flex h-14 w-full items-center gap-4 rounded-2xl border bg-background/45 px-4 text-left opacity-65">
+                  <span className="grid size-9 place-items-center rounded-full bg-foreground text-lg font-black text-background">X</span>
                   <span className="flex-1">
-                    <span className="block text-sm font-bold">Continue with X</span>
-                    <span className="block text-xs text-muted-foreground">Verify your X username</span>
+                    <span className="block text-sm font-bold">Connect X</span>
+                    <span className="block text-xs text-muted-foreground">Optional after email</span>
                   </span>
-                  {loginMethod === "x" && <CheckCircle2 className="size-5 text-primary" />}
                 </button>
-                <button type="button" onClick={() => setLoginMethod("telegram")} className={cn(
-                  "flex h-14 w-full items-center gap-4 rounded-2xl border px-4 text-left transition",
-                  loginMethod === "telegram" ? "border-primary/40 bg-accent" : "bg-background/45 hover:border-primary/25"
-                )}>
+                <button type="button" disabled className="flex h-14 w-full items-center gap-4 rounded-2xl border bg-background/45 px-4 text-left opacity-65">
                   <span className="grid size-9 place-items-center rounded-full bg-[#27A7E7] text-white"><Send className="size-4" /></span>
                   <span className="flex-1">
-                    <span className="block text-sm font-bold">Continue with Telegram</span>
-                    <span className="block text-xs text-muted-foreground">Verify your Telegram username</span>
+                    <span className="block text-sm font-bold">Connect Telegram</span>
+                    <span className="block text-xs text-muted-foreground">Optional after email</span>
                   </span>
-                  {loginMethod === "telegram" && <CheckCircle2 className="size-5 text-primary" />}
                 </button>
               </div>
-              <Button onClick={startAuthentication} disabled={!ready || busy} className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold">
-                {authenticated ? "Continue" : "Verify with Privy"} <ArrowRight className="size-4" />
+              <div className="mt-5 space-y-3">
+                <label className="block">
+                  <span className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                    Email address
+                  </span>
+                  <input
+                    type="email"
+                    value={emailAddress}
+                    onChange={(event) => {
+                      setEmailAddress(event.target.value);
+                      setEmailCodeSent(false);
+                      setEmailCode("");
+                    }}
+                    placeholder="you@example.com"
+                    className="h-12 w-full rounded-2xl border bg-background/50 px-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-ring/40"
+                  />
+                </label>
+                {emailCodeSent && (
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                      Verification code
+                    </span>
+                    <input
+                      inputMode="numeric"
+                      value={emailCode}
+                      onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, "").slice(0, 8))}
+                      placeholder="Enter code"
+                      className="h-12 w-full rounded-2xl border bg-background/50 px-4 text-center text-lg font-extrabold tracking-[0.2em] outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                  </label>
+                )}
+              </div>
+              <Button
+                onClick={startAuthentication}
+                disabled={!ready || busy || (!emailCodeSent && !emailLooksValid) || (emailCodeSent && emailCode.trim().length < 4)}
+                className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold disabled:opacity-55"
+              >
+                {busy ? "Verifying…" : authenticated ? "Continue" : emailCodeSent ? "Verify code" : "Send code"} <ArrowRight className="size-4" />
               </Button>
               <p className="mt-4 text-center text-[11px] leading-5 text-muted-foreground">
                 Privy creates the embedded wallet. Link X or Telegram only if you want people to pay those handles.
@@ -291,12 +391,10 @@ export function VerseOnboarding() {
               <span className="mx-auto grid size-16 place-items-center rounded-full bg-primary/10 text-primary"><Mail className="size-7" /></span>
               <div className="mt-6 text-center">
                 <h2 className="text-3xl font-extrabold tracking-[-0.055em]">
-                  {loginMethod === "email" ? "Verify your email" : "Add a recovery email"}
+                  Connect your handles
                 </h2>
                 <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-                  {loginMethod === "email"
-                    ? "This email signs you in, recovers your account, and receives payment notifications."
-                    : "We’ll use this only to recover your account and send payment notifications."}
+                  Your email is verified. Add X and Telegram now if you want people to find and pay those handles.
                 </p>
               </div>
               <label className="mt-7 block">
@@ -316,8 +414,30 @@ export function VerseOnboarding() {
                 <CheckCircle2 className="size-4 shrink-0" />
                 {user?.email?.address ? "Email verified by Privy" : "A verified recovery email is required before wallet setup"}
               </div>
+              <div className="mt-4 space-y-3">
+                <button
+                  type="button"
+                  onClick={() => void connectSocial("x")}
+                  className="flex h-12 w-full items-center gap-3 rounded-2xl border bg-background/45 px-4 text-sm font-bold transition hover:border-primary/25 disabled:opacity-60"
+                  disabled={Boolean(user?.twitter?.username)}
+                >
+                  <span className="grid size-8 place-items-center rounded-full bg-foreground text-xs font-black text-background">X</span>
+                  <span className="flex-1 text-left">{user?.twitter?.username ? `X @${user.twitter.username}` : "Connect X"}</span>
+                  {user?.twitter?.username && <CheckCircle2 className="size-4 text-primary" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void connectSocial("telegram")}
+                  className="flex h-12 w-full items-center gap-3 rounded-2xl border bg-background/45 px-4 text-sm font-bold transition hover:border-primary/25 disabled:opacity-60"
+                  disabled={Boolean(user?.telegram?.username)}
+                >
+                  <span className="grid size-8 place-items-center rounded-full bg-[#27A7E7] text-white"><Send className="size-3.5" /></span>
+                  <span className="flex-1 text-left">{user?.telegram?.username ? `Telegram @${user.telegram.username}` : "Connect Telegram"}</span>
+                  {user?.telegram?.username && <CheckCircle2 className="size-4 text-primary" />}
+                </button>
+              </div>
               <Button onClick={prepareAccount} disabled={busy} className="verse-gradient mt-6 h-12 w-full rounded-2xl border-0 text-base font-bold">
-                {busy ? "Preparing account…" : user?.email?.address ? "Create secure wallet" : "Link recovery email"}
+                {busy ? "Preparing account…" : user?.email?.address ? "Continue to username" : "Link recovery email"}
               </Button>
             </div>
           )}
@@ -372,16 +492,14 @@ export function VerseOnboarding() {
                 <span className="absolute -bottom-1 -right-1 grid size-8 place-items-center rounded-full bg-background ring-1 ring-border"><Wallet className="size-4 text-primary" /></span>
               </div>
               <h2 className="mt-7 text-3xl font-extrabold tracking-[-0.055em]">Account created</h2>
-              <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">Your embedded wallet is ready. Domain status: {claimStatus.replaceAll("_", " ") || "reserved"}.</p>
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+                Your embedded wallet is ready. {claimStatus === "active" ? "Your name is minted on Polygon and ready to receive payments." : "Your name is reserved. Payments to this name become available after its mint is confirmed on Polygon."}
+              </p>
               <div className="mt-7 rounded-[24px] border bg-background/50 p-5">
                 <p className="verse-gradient-text text-3xl font-extrabold tracking-[-0.055em]">{claimedName || `${username}.verse`}</p>
                 <div className="mt-4 flex justify-center gap-2">
                   <span className="rounded-full border px-3 py-1.5 text-xs font-bold">
-                    {loginMethod === "email"
-                      ? verifiedEmail
-                      : loginMethod === "x"
-                        ? `𝕏 @${user?.twitter?.username ?? "linked"}`
-                        : `Telegram @${user?.telegram?.username ?? "linked"}`}
+                    {verifiedEmail}
                   </span>
                   <span className="rounded-full border px-3 py-1.5 text-xs font-bold text-emerald-500">Verified</span>
                 </div>
@@ -390,7 +508,7 @@ export function VerseOnboarding() {
                 <ShieldCheck className="size-5 shrink-0 text-primary" />
                 <div>
                   <p className="text-xs font-bold">Privy wallet secured</p>
-                  <p className="text-[11px] text-muted-foreground">Protected by the server wallet policy and verified email recovery</p>
+                  <p className="text-[11px] text-muted-foreground">Protected by Privy and your verified email recovery</p>
                 </div>
               </div>
               {/* Let email-signup users connect socials right after onboarding */}
@@ -399,7 +517,7 @@ export function VerseOnboarding() {
                 {!user?.twitter?.username && (
                   <button
                     type="button"
-                    onClick={() => linkTwitter()}
+                    onClick={() => void connectSocial("x")}
                     className="flex h-11 w-full items-center gap-3 rounded-2xl border bg-background/40 px-4 text-sm font-bold transition hover:bg-background/70"
                   >
                     <span className="grid size-7 place-items-center rounded-full bg-foreground text-xs font-black text-background">𝕏</span>
@@ -409,7 +527,7 @@ export function VerseOnboarding() {
                 {!user?.telegram?.username && (
                   <button
                     type="button"
-                    onClick={() => linkTelegram()}
+                    onClick={() => void connectSocial("telegram")}
                     className="flex h-11 w-full items-center gap-3 rounded-2xl border bg-background/40 px-4 text-sm font-bold transition hover:bg-background/70"
                   >
                     <span className="grid size-7 place-items-center rounded-full bg-[#27A7E7] text-white"><Send className="size-3" /></span>
@@ -420,6 +538,7 @@ export function VerseOnboarding() {
                   <p className="text-xs text-emerald-500">✓ Social connected</p>
                 )}
               </div>
+              <InstallVerse variant="card" />
               <Button asChild className="verse-gradient mt-5 h-12 w-full rounded-2xl border-0 text-base font-bold">
                 <Link href="/">Open dashboard <ArrowRight className="size-4" /></Link>
               </Button>

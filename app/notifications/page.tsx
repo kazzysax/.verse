@@ -1,6 +1,7 @@
 "use client";
 
 import { Bell, Check } from "lucide-react";
+import Link from "next/link";
 import { VersePageShell } from "@/components/verse-page-shell";
 import { VerseLoader } from "@/components/verse-loader";
 import { useVerseAccount } from "@/components/use-verse-account";
@@ -37,9 +38,9 @@ export default function NotificationsPage() {
           {account.loading && <VerseLoader className="mx-auto my-10 size-14" label="Loading notifications" />}
           {error && <p role="alert" className="mb-4 rounded-2xl bg-rose-500/10 p-4 text-sm text-rose-300">{error}</p>}
           {!account.authenticated && !account.loading && (
-            <button type="button" onClick={() => account.login()} className="verse-gradient mx-auto my-9 block rounded-full px-6 py-3 text-sm font-extrabold">
+            <Link href="/signup" className="verse-gradient mx-auto my-9 block w-fit rounded-full px-6 py-3 text-sm font-extrabold">
               Sign in to view notifications
-            </button>
+            </Link>
           )}
           {account.authenticated && !account.loading && !account.notifications.length && (
             <div className="py-12 text-center">

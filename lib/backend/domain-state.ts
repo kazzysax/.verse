@@ -18,7 +18,7 @@ export async function reconcileDomainMint(input: {
     .innerJoin(domains, eq(domainOrders.domainId, domains.id))
     .where(eq(domainOrders.id, input.orderId))
     .limit(1);
-  if (!row) return;
+  if (!row || row.order.status === "active") return;
   const now = new Date().toISOString();
 
   if (input.state === "submitted") {
@@ -94,7 +94,7 @@ export async function reconcileDomainMint(input: {
           ),
         ),
       db.insert(notifications).values({
-        id: crypto.randomUUID(),
+        id: `domain_activated_${row.order.id}`,
         userId: row.order.userId,
         type: "domain_activated",
         title: `${row.domain.name}.verse is active`,
@@ -103,11 +103,11 @@ export async function reconcileDomainMint(input: {
         status: "sent",
         createdAt: now,
         sentAt: now,
-      }),
+      }).onConflictDoNothing(),
     ]);
   } catch (error) {
     console.error("Domain mint receipt reconciliation failed", error);
-    await markManualReview(row.order.id, "MINT_RECEIPT_RECONCILIATION_FAILED");
+    throw error;
   }
 }
 

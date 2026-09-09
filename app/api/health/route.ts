@@ -15,6 +15,7 @@ export async function GET() {
     service: "verse-pay-api",
     status: "ok",
     executionMode: executionMode(),
+    confirmationMode: optionalEnv("TRANSACTION_CONFIRMATION_MODE") ?? "webhook",
     capabilities: {
       privy: Boolean(optionalEnv("PRIVY_APP_ID") && optionalEnv("PRIVY_APP_SECRET")),
       domainRegistry: Boolean(optionalEnv("VERSE_REGISTRY_ADDRESS")),

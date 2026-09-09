@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/backend/auth";
 import { AppError } from "@/lib/backend/errors";
 import { errorResponse, json, readJson } from "@/lib/backend/http";
 import { createPayment, listPayments } from "@/lib/backend/payments";
-import { paymentSchema } from "@/lib/backend/validation";
+import { paymentSubmissionSchema } from "@/lib/backend/validation";
 import { enforceRateLimit } from "@/lib/backend/rate-limit";
 
 export const runtime = "edge";
@@ -27,9 +27,8 @@ export async function POST(request: Request) {
         "Provide an 8–100 character Idempotency-Key header.",
       );
     }
-    const input = paymentSchema.parse(await readJson(request));
+    const input = paymentSubmissionSchema.parse(await readJson(request));
     const payment = await createPayment({
-      accessToken: auth.accessToken,
       senderUserId: auth.user.id,
       idempotencyKey,
       ...input,

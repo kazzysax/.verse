@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { useSendTransaction } from "@privy-io/react-auth";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   Check,
   CheckCircle2,
+  Clock3,
+  CircleX,
   ChevronDown,
   Copy,
   ExternalLink,
@@ -50,11 +54,19 @@ function InitialAvatar({
 }
 
 type PaymentQuote = {
-  recipient: { provider: "verse" | "x" | "telegram"; handle: string };
+  quoteToken: string;
+  recipient: { provider: "verse" | "x" | "telegram"; handle: string; walletAddress: string };
   asset: Asset;
   amount: string;
   sponsored: boolean;
+  gas?: { symbol: string; estimatedMaxFee: string } | null;
   executionEnabled: boolean;
+  transaction: {
+    from: string;
+    to: string;
+    data: string;
+    chainId: number;
+  };
 };
 
 type SubmittedPayment = { id: string; status: string; txHash?: string | null; chainId: number };
@@ -72,6 +84,9 @@ export function SendFlow({
   initialRecipient?: string;
   compact?: boolean;
 }) {
+  const { sendTransaction } = useSendTransaction();
+  const inFlight = useRef(false);
+  const [walletApprovalOpen, setWalletApprovalOpen] = useState(false);
   const [step, setStep] = useState<SendStep>("details");
   const [asset, setAsset] = useState<Asset>("USDC");
   const [recipient, setRecipient] = useState(initialRecipient);
@@ -93,12 +108,14 @@ export function SendFlow({
   };
 
   const advance = async () => {
+    if (inFlight.current) return;
     setError("");
     if (!authenticated || !getAccessToken) {
       onSignIn?.();
       return;
     }
     if (step === "details") {
+      inFlight.current = true;
       try {
         const result = await verseApi<PaymentQuote>("/api/payments/quote", getAccessToken, {
           method: "POST",
@@ -108,38 +125,94 @@ export function SendFlow({
         setStep("review");
       } catch (requestError) {
         setError(friendlyApiError(requestError));
-      }
+      } finally { inFlight.current = false; }
     }
     if (step === "review") {
       if (!quote?.executionEnabled) {
         setError("Payments are not available yet. Please try again after activation.");
         return;
       }
+      inFlight.current = true;
       setStep("sending");
+      let broadcastHash: `0x${string}` | null = null;
       try {
-        const result = await verseApi<{ payment: SubmittedPayment }>("/api/payments", getAccessToken, {
-          method: "POST",
-          headers: { "idempotency-key": crypto.randomUUID() },
-          body: JSON.stringify({ recipient, asset, amount, memo: note || undefined }),
+        // Re-resolve and simulate immediately before opening the wallet approval.
+        const fresh = await verseApi<PaymentQuote>("/api/payments/quote", getAccessToken, {
+          method: "POST", body: JSON.stringify({ recipient, asset, amount }),
         });
+        if (fresh.transaction.data !== quote.transaction.data || fresh.transaction.from !== quote.transaction.from ||
+            fresh.transaction.to !== quote.transaction.to || fresh.transaction.chainId !== quote.transaction.chainId ||
+            fresh.sponsored !== quote.sponsored) {
+          setQuote(fresh);
+          throw new Error("Payment details changed. Review the updated recipient and network before confirming.");
+        }
+        const idempotencyKey = crypto.randomUUID();
+        // Privy's approval portal is outside this Radix dialog. Remove our
+        // dialog synchronously first so its page-wide pointer/focus locks
+        // cannot block the wallet's Approve button.
+        flushSync(() => setWalletApprovalOpen(true));
+        let hash: `0x${string}`;
+        try {
+          ({ hash } = await sendTransaction(
+            {
+              from: quote.transaction.from,
+              to: quote.transaction.to,
+              data: quote.transaction.data,
+              chainId: quote.transaction.chainId,
+            },
+            {
+              sponsor: quote.sponsored,
+              address: quote.transaction.from,
+            },
+          ));
+        } finally {
+          setWalletApprovalOpen(false);
+        }
+        broadcastHash = hash;
+        setSubmittedPayment({ id: "pending", status: "submitted", txHash: hash, chainId: quote.transaction.chainId });
+        let result: { payment: SubmittedPayment } | null = null;
+        let recordError: unknown = null;
+        for (let attempt = 0; attempt < 3 && !result; attempt += 1) {
+          try {
+            result = await verseApi<{ payment: SubmittedPayment }>("/api/payments", getAccessToken, {
+              method: "POST",
+              headers: { "idempotency-key": idempotencyKey },
+              body: JSON.stringify({ recipient, asset, amount, memo: note || undefined, txHash: hash, quoteToken: fresh.quoteToken }),
+            });
+          } catch (requestError) {
+            recordError = requestError;
+            if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 900 * (attempt + 1)));
+          }
+        }
+        if (!result) throw recordError;
         setSubmittedPayment(result.payment);
         setStep("success");
+        for (let attempt = 0; attempt < 20 && result.payment.status === "submitted"; attempt += 1) {
+          await new Promise(resolve => window.setTimeout(resolve, 3000));
+          result = await verseApi<{ payment: SubmittedPayment }>(`/api/payments/${result.payment.id}`, getAccessToken);
+          setSubmittedPayment(result.payment);
+        }
       } catch (requestError) {
-        setStep("review");
-        setError(friendlyApiError(requestError));
-      }
+        if (broadcastHash) {
+          setStep("success");
+          setError("The transfer was broadcast on Polygon, but activity tracking is still syncing. Do not send it again.");
+        } else {
+          setStep("review");
+          setError(friendlyApiError(requestError));
+        }
+      } finally { inFlight.current = false; }
     }
   };
 
   return (
-    <Dialog onOpenChange={(open) => !open && window.setTimeout(reset, 180)}>
+    <Dialog onOpenChange={(open) => !open && !inFlight.current && window.setTimeout(reset, 180)}>
       <DialogTrigger asChild>
         <button type="button" aria-label={compact ? `Pay ${initialRecipient}` : "Send money"} className={compact ? "verse-gradient grid size-11 shrink-0 place-items-center rounded-full shadow-[0_10px_25px_rgba(132,58,240,.25)]" : "group flex min-w-0 flex-1 flex-col items-center justify-center rounded-[20px] bg-white px-3 py-4 text-[#101117] transition duration-200 hover:-translate-y-1"}>
           <ArrowUpRight className={compact ? "size-4" : "mb-1 size-5"} />
           {!compact && <span className="text-sm font-extrabold">Send</span>}
         </button>
       </DialogTrigger>
-      <DialogContent className="inset-x-0 bottom-0 left-0 top-auto h-[62svh] max-h-[62svh] w-full max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-b-none rounded-t-[30px] border-white/10 bg-[#101116] p-0 text-white shadow-[0_-24px_90px_rgba(0,0,0,.7)] data-[state=closed]:slide-out-to-bottom-8 data-[state=open]:slide-in-from-bottom-8 sm:bottom-auto sm:left-[50%] sm:top-[50%] sm:h-auto sm:max-h-[92vh] sm:max-w-[460px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[30px] sm:shadow-[0_36px_120px_rgba(0,0,0,.7)]">
+      {!walletApprovalOpen && <DialogContent className="inset-x-0 bottom-0 left-0 top-auto h-[62svh] max-h-[62svh] w-full max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-b-none rounded-t-[30px] border-white/10 bg-[#101116] p-0 text-white shadow-[0_-24px_90px_rgba(0,0,0,.7)] data-[state=closed]:slide-out-to-bottom-8 data-[state=open]:slide-in-from-bottom-8 sm:bottom-auto sm:left-[50%] sm:top-[50%] sm:h-auto sm:max-h-[92vh] sm:max-w-[460px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[30px] sm:shadow-[0_36px_120px_rgba(0,0,0,.7)]">
         <div aria-hidden="true" className="absolute left-1/2 top-2.5 h-1 w-10 -translate-x-1/2 rounded-full bg-white/20 sm:hidden" />
         <div className="h-full overflow-y-auto overscroll-contain px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-7 sm:h-auto sm:p-7">
           {step === "details" && (
@@ -234,6 +307,7 @@ export function SendFlow({
                     </span>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-white/40">{quote?.recipient.provider ?? "identity"} · verified</p>
+                  <p className="mt-1 break-all text-[10px] text-white/50">{quote?.recipient.walletAddress}</p>
                 </div>
                 <button
                   type="button"
@@ -254,7 +328,7 @@ export function SendFlow({
                 </p>
                 <button
                   type="button"
-                  onClick={() => setAsset(asset === "USDC" ? "VERSE" : "USDC")}
+                  onClick={() => { setAsset(asset === "USDC" ? "VERSE" : "USDC"); setQuote(null); setStep("details"); }}
                   className="mx-auto mt-5 inline-flex min-w-32 items-center gap-2 rounded-full bg-white/[.065] px-4 py-2.5 text-sm font-extrabold transition hover:bg-white/[.11]"
                 >
                   <span className={cn("size-3 rounded-full", asset === "USDC" ? "bg-[#2775ca]" : "verse-gradient")} />
@@ -274,7 +348,7 @@ export function SendFlow({
                 </div>
                 <div className="flex items-center justify-between gap-4 py-4">
                   <span className="text-white/40">Network fee</span>
-                  <span className="font-bold text-emerald-400">$0 · sponsored</span>
+                  <span className="font-bold">{quote?.sponsored ? "$0 · sponsored" : quote?.gas ? `Up to ${Number(quote.gas.estimatedMaxFee).toPrecision(3)} POL (estimate)` : "Paid from your POL balance"}</span>
                 </div>
               </div>
 
@@ -303,10 +377,10 @@ export function SendFlow({
           {step === "success" && (
             <div className="py-7 text-center">
               <div className="mx-auto grid size-20 place-items-center rounded-full bg-emerald-500/12">
-                <Check className="size-9 text-emerald-500" />
+                {submittedPayment?.status === "confirmed" ? <Check className="size-9 text-emerald-500" /> : submittedPayment?.status === "failed" ? <CircleX className="size-9 text-rose-400" /> : <Clock3 className="size-9 text-amber-400" />}
               </div>
-              <DialogTitle className="mt-6 text-3xl tracking-[-0.05em]">Payment sent</DialogTitle>
-              <DialogDescription className="mt-2">Your payment was submitted.</DialogDescription>
+              <DialogTitle className="mt-6 text-3xl tracking-[-0.05em]">{submittedPayment?.status === "confirmed" ? "Payment confirmed" : submittedPayment?.status === "failed" ? "Payment failed" : "Payment pending"}</DialogTitle>
+              <DialogDescription className="mt-2">{submittedPayment?.status === "confirmed" ? "Confirmed on Polygon." : submittedPayment?.status === "failed" ? "Polygon did not complete this transfer." : "Waiting for on-chain confirmation. Do not send again."}</DialogDescription>
               <p className="mt-7 text-4xl font-extrabold tracking-[-0.06em]">
                 {amount} {asset}
               </p>
@@ -316,10 +390,11 @@ export function SendFlow({
                   <ExternalLink className="size-4" /> View transaction
                 </a>
               </Button>}
+              {error && <p role="alert" className="mt-4 rounded-2xl bg-amber-500/10 p-3 text-xs font-semibold text-amber-200">{error}</p>}
             </div>
           )}
         </div>
-      </DialogContent>
+      </DialogContent>}
     </Dialog>
   );
 }
@@ -410,7 +485,7 @@ export function DepositFlow({
             <p className="text-xs font-bold uppercase tracking-[.14em] text-white/40">Deposit address</p>
             <p className="mt-2 break-all text-sm font-semibold">{deposit.walletAddress}</p>
           </div>
-          <p className="text-xs leading-5 text-amber-200/80">Sending from an external wallet is not gasless. Confirm the network and token before depositing.</p>
+          <p className="text-xs leading-5 text-amber-200/80">Send USDC or VERSE for payments, and POL for network fees, to this address on Polygon. Use native POL, not wrapped POL.</p>
           <Button onClick={copyAddress} className="verse-gradient h-11 w-full rounded-2xl border-0">{copied ? <Check className="size-4" /> : <Copy className="size-4" />}{copied ? "Copied" : "Copy address"}</Button>
         </div>}
         {!deposit && !error && <div className="grid min-h-40 place-items-center"><VerseLoader className="size-14" label="Loading deposit details" /></div>}

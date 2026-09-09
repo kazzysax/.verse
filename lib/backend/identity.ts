@@ -42,27 +42,12 @@ export async function resolveRecipient(raw: string, provider?: IdentityProvider)
     if (!result?.walletAddress) {
       throw new AppError(404, "RECIPIENT_NOT_FOUND", "That .verse name is not registered.");
     }
-    // Domain is reserved/pending (on-chain mint in progress) — still payable via DB record
-    if (result.domainStatus === "reserved" || result.domainStatus === "pending" || result.domainStatus === "mint_submitted") {
-      return {
-        ...result,
-        displayHandle: result.displayHandle ?? `${target.normalized}.verse`,
-        provider: target.provider,
-        normalizedHandle: target.normalized,
-      };
-    }
     if (result.domainStatus !== "active") {
       throw new AppError(404, "RECIPIENT_NOT_FOUND", "That .verse name is not registered and active.");
     }
     const onchainOwner = getAddress(await readNameOwner(target.normalized));
     if (onchainOwner === zeroAddress) {
-      // Name reserved in DB but not yet minted on-chain — still payable
-      return {
-        ...result,
-        displayHandle: result.displayHandle ?? `${target.normalized}.verse`,
-        provider: target.provider,
-        normalizedHandle: target.normalized,
-      };
+      throw new AppError(409, "DOMAIN_NOT_MINTED", "This name has not been minted on Polygon yet.");
     }
     if (
       onchainOwner.toLowerCase() !== result.recordedOwnerWallet.toLowerCase() ||

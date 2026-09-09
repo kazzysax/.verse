@@ -80,3 +80,19 @@ test("renders sidebar skeletons deterministically", async () => {
   assert.equal(first, second);
   assert.match(first, /--skeleton-width:70%/);
 });
+
+test("uninitialized authentication cannot report successful code delivery or login", async () => {
+  const { emptyVerseAuth } = await vite.ssrLoadModule("/components/verse-auth-context.tsx");
+  assert.equal(emptyVerseAuth.ready, false);
+  for (const action of ["sendEmailCode", "loginWithEmailCode", "loginWithTwitter", "loginWithTelegram"]) {
+    await assert.rejects(() => emptyVerseAuth[action](""), /Sign-in is not connected/);
+  }
+});
+
+test("authentication initialization is visible and disappears only when ready", async () => {
+  const { AuthInitializationNotice } = await vite.ssrLoadModule("/components/auth-initialization-notice.tsx");
+  const pending = renderToStaticMarkup(React.createElement(AuthInitializationNotice, { ready: false }));
+  assert.match(pending, /role="status"/);
+  assert.match(pending, /Connecting to secure sign-in/);
+  assert.equal(renderToStaticMarkup(React.createElement(AuthInitializationNotice, { ready: true })), "");
+});

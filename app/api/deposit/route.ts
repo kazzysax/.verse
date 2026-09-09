@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     return json({
       walletAddress: auth.user.walletAddress,
       chainId: chain.chainId,
-      network: chain.mode,
+      network: chain.chainId === 137 ? "mainnet" : "amoy",
       tokens: Object.entries(tokens).filter((entry) => entry[1]).map(([asset, token]) => ({ asset, address: token?.address })),
     });
   } catch (error) {

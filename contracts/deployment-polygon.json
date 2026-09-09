@@ -1,0 +1,13 @@
+{
+  "chainId": 137,
+  "contractAddress": "0x21958067226ef833294972418772fc215c994862",
+  "transactionHash": "0x9c021bb869177bafcc2563f99e100d44838a4646e6e015b58e14991b31892218",
+  "privyTransactionId": "d761215d-0121-4754-9ee1-b3811d283170",
+  "deploymentRequestId": "verse-registry-polygon-20260905-v2",
+  "admin": "0x51F0d7149aA2add9655daD5ff367afC7b192D2BC",
+  "registrar": "0x509603E6c75d29Dd19c3160FfCBDf6bc8b4cb2DA",
+  "pauser": "0xA045F00973fecbcbda80A17e4b0E8fF9f6141151",
+  "baseTokenURI": "https://verse-pay.web3kingley.chatgpt.site/api/domains/metadata/",
+  "receiptStatus": "success",
+  "confirmationsAtDeployment": 5
+}

@@ -1,4 +1,5 @@
 import { and, eq, notInArray } from "drizzle-orm";
+import { getAddress } from "viem";
 import { identities, users } from "@/db/schema";
 import { getDb } from "@/db";
 import { AppError } from "./errors";
@@ -8,6 +9,14 @@ import { createEmbeddedWallet, getPrivyClient } from "./privy";
 type PrivyLinkedAccount = {
   type: string;
   address?: string | null;
+  id?: string | null;
+  chain_type?: string | null;
+  chainType?: string | null;
+  connector_type?: string | null;
+  connectorType?: string | null;
+  wallet_client?: string | null;
+  wallet_client_type?: string | null;
+  walletClientType?: string | null;
   subject?: string | null;
   username?: string | null;
   telegram_user_id?: string | null;
@@ -30,6 +39,9 @@ export async function bootstrapUser(input: {
     );
   }
   const verifiedRecoveryEmail = requestedEmail ?? verifiedEmails[0] ?? null;
+  if (!verifiedRecoveryEmail) {
+    throw new AppError(400, "EMAIL_REQUIRED", "Verify your email before creating your .verse account.");
+  }
   const db = getDb();
   const now = new Date().toISOString();
   const [existing] = await db
@@ -58,9 +70,15 @@ export async function bootstrapUser(input: {
   let walletId = existing?.privyWalletId ?? null;
   let walletAddress = existing?.walletAddress ?? null;
   if (!walletId || !walletAddress) {
-    const wallet = await createEmbeddedWallet(input.privyUserId, internalId);
-    walletId = wallet.id;
-    walletAddress = wallet.address;
+    const privyWallet = findPrivyEmbeddedWallet(linkedAccounts);
+    if (privyWallet) {
+      walletId = privyWallet.id;
+      walletAddress = privyWallet.address;
+    } else {
+      const wallet = await createEmbeddedWallet(input.privyUserId, internalId);
+      walletId = wallet.id;
+      walletAddress = wallet.address;
+    }
     await db
       .update(users)
       .set({ privyWalletId: walletId, walletAddress, updatedAt: new Date().toISOString() })
@@ -92,7 +110,30 @@ async function getPrivyLinkedAccounts(privyUserId: string) {
     throw new AppError(502, "PRIVY_USER_LOOKUP_FAILED", "Could not verify linked accounts with Privy.");
   }
 
-  return privyUser.linked_accounts as PrivyLinkedAccount[];
+  return ((privyUser.linked_accounts ?? (privyUser as { linkedAccounts?: PrivyLinkedAccount[] }).linkedAccounts) as PrivyLinkedAccount[] | undefined) ?? [];
+}
+
+function findPrivyEmbeddedWallet(accounts: PrivyLinkedAccount[]) {
+  const wallet = accounts.find(
+    (account) => {
+      const chainType = account.chain_type ?? account.chainType;
+      const connectorType = account.connector_type ?? account.connectorType;
+      const walletClientType = account.wallet_client ?? account.wallet_client_type ?? account.walletClientType;
+      return account.type === "wallet" &&
+        chainType === "ethereum" &&
+        (!connectorType || connectorType === "embedded") &&
+        walletClientType === "privy" &&
+        account.address;
+    },
+  );
+  if (!wallet?.address) return null;
+  if (!wallet.id) {
+    throw new AppError(409, "WALLET_SYNC_PENDING", "Your wallet is still syncing. Please try again shortly.");
+  }
+  return {
+    id: wallet.id,
+    address: getAddress(wallet.address),
+  };
 }
 
 async function syncAccounts(userId: string, accounts: PrivyLinkedAccount[]) {

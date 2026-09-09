@@ -26,6 +26,11 @@ export const paymentSchema = resolveSchema.extend({
   memo: z.string().trim().max(140).optional(),
 });
 
+export const paymentSubmissionSchema = paymentSchema.extend({
+  quoteToken: z.string().min(64).max(4096),
+  txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/, "Provide a valid Polygon transaction hash."),
+});
+
 export const contactSchema = z.object({
   recipient: z.string().trim().min(1).max(64),
   provider: providerSchema.optional(),

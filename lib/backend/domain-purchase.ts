@@ -14,12 +14,14 @@ import {
   DAILY_SPONSORED_PAYMENT_LIMIT,
   requiredEnv,
   tokenFor,
+  paymentsSponsored,
 } from "./config";
 import { AppError } from "./errors";
 import { verifyPaidDomainQuote } from "./domain-pricing";
 import { operationRecord, markOperationSubmitted, markOperationSubmissionError } from "./chain-operations";
 import { sponsorshipRecord } from "./gas-policy";
-import { sendSponsoredErc20Transfer } from "./privy";
+import { sendErc20Transfer } from "./privy";
+import { checkTransferFunding } from "./polygon";
 import { classifySubmissionError } from "./provider-errors";
 import { recordAudit } from "./audit";
 
@@ -51,6 +53,9 @@ export async function purchaseAdditionalDomain(input: {
     order: crypto.randomUUID(),
     operation: crypto.randomUUID(),
   };
+  const sponsored = paymentsSponsored();
+  const token = tokenFor("VERSE");
+  await checkTransferFunding({ walletAddress: user.walletAddress, tokenAddress: token.address, recipientAddress: requiredEnv("VERSE_TREASURY_ADDRESS"), amountAtomic: BigInt(quote.priceVerseAtomic), sponsored });
   const providerRequestId = `dpay_${ids.operation.replaceAll("-", "")}`;
   const now = new Date().toISOString();
   try {
@@ -102,9 +107,9 @@ export async function purchaseAdditionalDomain(input: {
         createdAt: now,
         updatedAt: now,
       }),
-      db.insert(gasSponsorships).values(
+      ...(sponsored ? [db.insert(gasSponsorships).values(
         sponsorshipRecord(ids.operation, user.id, new Date(now)),
-      ),
+      )] : []),
     ]);
   } catch (error) {
     const [concurrent] = await db
@@ -128,7 +133,7 @@ export async function purchaseAdditionalDomain(input: {
 
   try {
     const token = tokenFor("VERSE");
-    const sent = await sendSponsoredErc20Transfer({
+    const sent = await sendErc20Transfer({
       accessToken: input.accessToken,
       walletId: user.privyWalletId,
       tokenAddress: token.address,

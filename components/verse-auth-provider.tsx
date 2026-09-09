@@ -1,21 +1,12 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore, type ComponentType } from "react";
-import { emptyVerseAuth, VerseAuthContext } from "@/components/verse-auth-context";
 import { VerseLoader } from "@/components/verse-loader";
 
 type ClientConfig = { privyAppId: string };
 type RuntimeProps = { appId: string; children: React.ReactNode };
 
 const subscribeToStartupState = () => () => undefined;
-
-function PreviewAuthRuntime({ children }: RuntimeProps) {
-  return (
-    <VerseAuthContext.Provider value={{ ...emptyVerseAuth, ready: true }}>
-      {children}
-    </VerseAuthContext.Provider>
-  );
-}
 
 export function VerseAuthProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<ClientConfig | null>(null);
@@ -33,9 +24,7 @@ export function VerseAuthProvider({ children }: { children: React.ReactNode }) {
         if (!response.ok) throw new Error("Authentication configuration unavailable");
         return response.json() as Promise<ClientConfig>;
       });
-    const runtimeRequest = window.location.protocol === "http:" && window.location.hostname === "terminal.local"
-      ? Promise.resolve(PreviewAuthRuntime)
-      : import("@/components/privy-runtime").then((module) => module.PrivyRuntime);
+    const runtimeRequest = import("@/components/privy-runtime").then((module) => module.PrivyRuntime);
     Promise.all([configRequest, runtimeRequest])
       .then(([value, PrivyRuntime]) => {
         if (!active) return;

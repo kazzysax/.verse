@@ -15,21 +15,33 @@ export type VerseAuthValue = {
   user: VerseAuthUser | null;
   login: (options?: { loginMethods?: Array<"email" | "twitter" | "telegram"> }) => void;
   logout: () => Promise<void>;
+  sendEmailCode: (email: string) => Promise<void>;
+  loginWithEmailCode: (code: string) => Promise<void>;
+  loginWithTwitter: () => Promise<void>;
+  loginWithTelegram: () => Promise<void>;
   linkEmail: () => void;
-  linkTwitter: () => void;
-  linkTelegram: () => void;
+  linkTwitter: () => void | Promise<void>;
+  linkTelegram: () => void | Promise<void>;
   getAccessToken: () => Promise<string | null>;
 };
+
+function authenticationUnavailable(): never {
+  throw new Error("Sign-in is not connected. Please reload and try again.");
+}
 
 export const emptyVerseAuth: VerseAuthValue = {
   ready: false,
   authenticated: false,
   user: null,
-  login: () => undefined,
+  login: authenticationUnavailable,
   logout: async () => undefined,
-  linkEmail: () => undefined,
-  linkTwitter: () => undefined,
-  linkTelegram: () => undefined,
+  sendEmailCode: async () => authenticationUnavailable(),
+  loginWithEmailCode: async () => authenticationUnavailable(),
+  loginWithTwitter: async () => authenticationUnavailable(),
+  loginWithTelegram: async () => authenticationUnavailable(),
+  linkEmail: authenticationUnavailable,
+  linkTwitter: authenticationUnavailable,
+  linkTelegram: authenticationUnavailable,
   getAccessToken: async () => null,
 };
 

@@ -26,7 +26,7 @@ export default function MarketplacePage() {
 
   const checkName = async () => {
     if (!account.authenticated) {
-      account.login();
+      window.location.assign("/signup");
       return;
     }
     setBusy(true);

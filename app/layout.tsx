@@ -9,9 +9,12 @@ export const metadata: Metadata = {
   other: {
     "codex-preview": "development",
   },
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, title: ".verse", statusBarStyle: "black-translucent" },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
+    apple: "/verse-home.png",
   },
 };
 
