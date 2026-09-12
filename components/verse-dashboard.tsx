@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useSendTransaction } from "@privy-io/react-auth";
+import { useAuthorizationSignature, useSendTransaction } from "@privy-io/react-auth";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -70,6 +70,16 @@ type PaymentQuote = {
 };
 
 type SubmittedPayment = { id: string; status: string; txHash?: string | null; chainId: number };
+type WalletPolicyMigration = {
+  required: boolean;
+  request?: {
+    version: 1;
+    method: "PATCH";
+    url: string;
+    body: { policy_ids: string[] };
+    headers: { "privy-app-id": string };
+  };
+};
 
 export function SendFlow({
   authenticated = false,
@@ -85,6 +95,7 @@ export function SendFlow({
   compact?: boolean;
 }) {
   const { sendTransaction } = useSendTransaction();
+  const { generateAuthorizationSignature } = useAuthorizationSignature();
   const inFlight = useRef(false);
   const [walletApprovalOpen, setWalletApprovalOpen] = useState(false);
   const [step, setStep] = useState<SendStep>("details");
@@ -117,6 +128,15 @@ export function SendFlow({
     if (step === "details") {
       inFlight.current = true;
       try {
+        const migration = await verseApi<WalletPolicyMigration>("/api/account/wallet-policy", getAccessToken);
+        if (migration.required) {
+          if (!migration.request) throw new Error("Wallet security update is unavailable. Please sign in again.");
+          const { signature } = await generateAuthorizationSignature(migration.request);
+          await verseApi("/api/account/wallet-policy", getAccessToken, {
+            method: "POST",
+            body: JSON.stringify({ signature }),
+          });
+        }
         const result = await verseApi<PaymentQuote>("/api/payments/quote", getAccessToken, {
           method: "POST",
           body: JSON.stringify({ recipient, asset, amount }),

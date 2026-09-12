@@ -56,6 +56,36 @@ export async function readUserWalletPolicies(walletId: string) {
   return { walletAddress: wallet.address, policyIds: wallet.policy_ids, authorizationThreshold: wallet.authorization_threshold };
 }
 
+export async function userWalletPolicyMigration(walletId: string) {
+  const wallet = await getPrivyClient().wallets().get(walletId);
+  if (!wallet.policy_ids?.length) return { required: false as const };
+
+  return {
+    required: true as const,
+    request: {
+      version: 1 as const,
+      method: "PATCH" as const,
+      url: `https://api.privy.io/v1/wallets/${walletId}`,
+      body: { policy_ids: [] as string[] },
+      headers: { "privy-app-id": requiredEnv("PRIVY_APP_ID") },
+    },
+  };
+}
+
+export async function applyUserWalletPolicyMigration(walletId: string, signature: string) {
+  await getPrivyClient().wallets().update(walletId, {
+    policy_ids: [],
+    authorization_context: { signatures: [signature] },
+  });
+
+  const updated = await getPrivyClient().wallets().get(walletId);
+  if (updated.policy_ids?.length) {
+    throw new Error("Privy kept a restrictive policy attached to the wallet.");
+  }
+
+  return { migrated: true as const, walletAddress: updated.address };
+}
+
 export async function sendErc20Transfer(input: {
   accessToken: string;
   walletId: string;
